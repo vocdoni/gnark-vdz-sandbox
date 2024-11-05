@@ -21,7 +21,9 @@ import (
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend"
+	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/frontend"
+	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/std/hash/mimc"
 	"github.com/consensys/gnark/test"
 )
@@ -41,7 +43,6 @@ func (t *circuitSignature) Define(api frontend.API) error {
 }
 
 func TestCircuitSignature(t *testing.T) {
-
 	const nbAccounts = 10
 
 	operator, users := createOperator(nbAccounts)
@@ -85,13 +86,11 @@ func TestCircuitSignature(t *testing.T) {
 	}
 
 	assert.ProverSucceeded(&signatureCircuit, &operator.witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
-
 }
 
 type circuitInclusionProof Circuit
 
 func (t *circuitInclusionProof) Define(api frontend.API) error {
-
 	hashFunc, err := mimc.NewMiMC(api)
 	if err != nil {
 		return err
@@ -106,7 +105,6 @@ func (t *circuitInclusionProof) Define(api frontend.API) error {
 }
 
 func TestCircuitInclusionProof(t *testing.T) {
-
 	if testing.Short() {
 		t.Skip("skipping rollup tests for circleCI")
 	}
@@ -158,14 +156,12 @@ func TestCircuitInclusionProof(t *testing.T) {
 		test.WithCurves(ecc.BN254),
 		test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()),
 		test.WithBackends(backend.GROTH16))
-
 }
 
 type circuitUpdateAccount Circuit
 
 // Circuit implements part of the rollup circuit only by declaring a subset of the constraints
 func (t *circuitUpdateAccount) Define(api frontend.API) error {
-
 	if err := (*Circuit)(t).postInit(api); err != nil {
 		return err
 	}
@@ -176,7 +172,6 @@ func (t *circuitUpdateAccount) Define(api frontend.API) error {
 }
 
 func TestCircuitUpdateAccount(t *testing.T) {
-
 	if testing.Short() {
 		t.Skip("skipping rollup tests for circleCI")
 	}
@@ -216,11 +211,9 @@ func TestCircuitUpdateAccount(t *testing.T) {
 	(*Circuit)(&updateAccountCircuit).allocateSlicesMerkleProofs()
 
 	assert.ProverSucceeded(&updateAccountCircuit, &operator.witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
-
 }
 
 func TestCircuitFull(t *testing.T) {
-
 	if testing.Short() {
 		t.Skip("skipping rollup tests for circleCI")
 	}
@@ -271,5 +264,82 @@ func TestCircuitFull(t *testing.T) {
 		&operator.witnesses,
 		test.WithCurves(ecc.BN254),
 		test.WithBackends(backend.GROTH16))
+}
 
+func TestCircuitCompile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping rollup tests for circleCI")
+	}
+
+	operator, users := createOperator(nbAccounts)
+
+	// read accounts involved in the transfer
+	sender, err := operator.readAccount(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	receiver, err := operator.readAccount(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// create the transfer and sign it
+	amount := uint64(16)
+	transfer := NewTransfer(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+
+	// sign the transfer
+	_, err = transfer.Sign(users[0], operator.h)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// update the state from the received transfer
+	err = operator.updateState(transfer, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// we allocate the slices of the circuit before compiling it
+	var inclusionProofCircuit circuitInclusionProof
+	for i := 0; i < BatchSizeCircuit; i++ {
+		inclusionProofCircuit.MerkleProofReceiverBefore[i].Path = make([]frontend.Variable, depth)
+		inclusionProofCircuit.MerkleProofReceiverAfter[i].Path = make([]frontend.Variable, depth)
+		inclusionProofCircuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
+		inclusionProofCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
+	}
+
+	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &inclusionProofCircuit)
+	if err != nil {
+		panic(err)
+	}
+	// groth16 zkSNARK: Setup
+	pk, vk, err := groth16.Setup(ccs)
+	if err != nil {
+		panic(err)
+	}
+
+	witness, err := frontend.NewWitness(operator.Witnesses(), ecc.BN254.ScalarField())
+	if err != nil {
+		panic(err)
+	}
+
+	publicWitness, err := witness.Public()
+	if err != nil {
+		panic(err)
+	}
+
+	// if err := test.IsSolved(circuit, op.Witnesses(), ecc.BN254.ScalarField()); err != nil {
+	// 	panic(err)
+	// }
+
+	// groth16: Prove & Verify
+	proof, err := groth16.Prove(ccs, pk, witness)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := groth16.Verify(proof, vk, publicWitness); err != nil {
+		panic(err)
+	}
 }

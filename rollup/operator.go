@@ -58,7 +58,6 @@ type Operator struct {
 // NewOperator creates a new operator.
 // nbAccounts is the number of accounts managed by this operator, h is the hash function for the merkle proofs
 func NewOperator(nbAccounts int) Operator {
-
 	res := Operator{}
 
 	// create a list of empty accounts
@@ -95,7 +94,6 @@ func (o *Operator) readAccount(i uint64) (Account, error) {
 // updateState updates the state according to transfer
 // numTransfer is the number of the transfer currently handled (between 0 and BatchSizeCircuit)
 func (o *Operator) updateState(t Transfer, numTransfer int) error {
-
 	var posSender, posReceiver uint64
 	var ok bool
 
