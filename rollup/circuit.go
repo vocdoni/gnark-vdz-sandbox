@@ -84,7 +84,6 @@ type TransferConstraints struct {
 }
 
 func (circuit *Circuit) postInit(api frontend.API) error {
-
 	for i := 0; i < BatchSizeCircuit; i++ {
 
 		// setting the sender accounts before update
@@ -112,7 +111,6 @@ func (circuit *Circuit) postInit(api frontend.API) error {
 }
 
 func (circuit *Circuit) allocateSlicesMerkleProofs() {
-
 	for i := 0; i < BatchSizeCircuit; i++ {
 		// allocating slice for the Merkle paths
 		circuit.MerkleProofReceiverBefore[i].Path = make([]frontend.Variable, depth)
@@ -120,12 +118,10 @@ func (circuit *Circuit) allocateSlicesMerkleProofs() {
 		circuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
 		circuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
 	}
-
 }
 
 // Define declares the circuit's constraints
-func (circuit *Circuit) Define(api frontend.API) error {
-
+func (circuit Circuit) Define(api frontend.API) error {
 	if err := circuit.postInit(api); err != nil {
 		return err
 	}
@@ -174,7 +170,6 @@ func (circuit *Circuit) Define(api frontend.API) error {
 
 // verifyTransferSignature ensures that the signature of the transfer is valid
 func verifyTransferSignature(api frontend.API, t TransferConstraints, hFunc mimc.MiMC) error {
-
 	// Reset the hash state!
 	hFunc.Reset()
 
@@ -196,7 +191,6 @@ func verifyTransferSignature(api frontend.API, t TransferConstraints, hFunc mimc
 }
 
 func verifyAccountUpdated(api frontend.API, from, to, fromUpdated, toUpdated AccountConstraints, amount frontend.Variable) {
-
 	// ensure that nonce is correctly updated
 	nonceUpdated := api.Add(from.Nonce, 1)
 	api.AssertIsEqual(nonceUpdated, fromUpdated.Nonce)
@@ -211,5 +205,4 @@ func verifyAccountUpdated(api frontend.API, from, to, fromUpdated, toUpdated Acc
 
 	toBalanceUpdated := api.Add(to.Balance, amount)
 	api.AssertIsEqual(toBalanceUpdated, toUpdated.Balance)
-
 }
