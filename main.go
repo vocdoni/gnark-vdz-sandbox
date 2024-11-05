@@ -1,20 +1,42 @@
 package main
 
 import (
+	"math/big"
+
 	"gnark-vdz/rollup"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
-	"github.com/consensys/gnark/std/accumulator/merkle"
-	"github.com/consensys/gnark/std/signature/eddsa"
+	"github.com/consensys/gnark/std/hash/mimc"
 	"github.com/consensys/gnark/test"
 )
 
+type simplerCircuit rollup.Circuit
+
+const BatchSizeCircuit = 1 // nbTranfers to batch in a proof
+
+// Circuit implements part of the rollup circuit only by declaring a subset of the constraints
+func (circuit simplerCircuit) Define(api frontend.API) error {
+	hFunc, err := mimc.NewMiMC(api)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < BatchSizeCircuit; i++ {
+		api.AssertIsEqual(circuit.RootHashesBefore[i], circuit.MerkleProofReceiverBefore[i].RootHash)
+		api.AssertIsEqual(circuit.RootHashesAfter[i], circuit.MerkleProofReceiverAfter[i].RootHash)
+		// circuit.MerkleProofReceiverBefore[i].VerifyProof(api, &hFunc, circuit.LeafReceiver[i])
+		// circuit.MerkleProofReceiverAfter[i].VerifyProof(api, &hFunc, circuit.LeafReceiver[i])
+		hFunc.Write(big.NewInt(int64(1)))
+		api.Println(hFunc.Sum())
+	}
+	return nil
+}
+
 func main() {
 	// compiles our circuit into a R1CS
-	var circuit rollup.Circuit
+	var circuit simplerCircuit
 	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuit)
 	if err != nil {
 		panic(err)
@@ -24,26 +46,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	op := rollup.NewOperator(10)
 
-	// witness definition
-	assignment := rollup.Circuit{
-		SenderAccountsBefore:      [1]rollup.AccountConstraints{},
-		ReceiverAccountsBefore:    [1]rollup.AccountConstraints{},
-		PublicKeysSender:          [1]eddsa.PublicKey{},
-		SenderAccountsAfter:       [1]rollup.AccountConstraints{},
-		ReceiverAccountsAfter:     [1]rollup.AccountConstraints{},
-		PublicKeysReceiver:        [1]eddsa.PublicKey{},
-		Transfers:                 [1]rollup.TransferConstraints{},
-		MerkleProofReceiverBefore: [1]merkle.MerkleProof{},
-		MerkleProofReceiverAfter:  [1]merkle.MerkleProof{},
-		MerkleProofSenderBefore:   [1]merkle.MerkleProof{},
-		MerkleProofSenderAfter:    [1]merkle.MerkleProof{},
-		LeafReceiver:              [1]frontend.Variable{},
-		LeafSender:                [1]frontend.Variable{},
-		RootHashesBefore:          [1]frontend.Variable{},
-		RootHashesAfter:           [1]frontend.Variable{},
-	}
-	witness, err := frontend.NewWitness(&assignment, ecc.BN254.ScalarField())
+	witness, err := frontend.NewWitness(op.Witnesses(), ecc.BN254.ScalarField())
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +58,7 @@ func main() {
 		panic(err)
 	}
 
-	if err := test.IsSolved(circuit, assignment, ecc.BN254.ScalarField()); err != nil {
+	if err := test.IsSolved(circuit, op.Witnesses(), ecc.BN254.ScalarField()); err != nil {
 		panic(err)
 	}
 

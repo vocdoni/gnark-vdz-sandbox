@@ -80,9 +80,12 @@ func NewOperator(nbAccounts int) Operator {
 	return res
 }
 
+func (o *Operator) Witnesses() Circuit {
+	return o.witnesses
+}
+
 // readAccount reads the account located at index i
 func (o *Operator) readAccount(i uint64) (Account, error) {
-
 	var res Account
 	err := Deserialize(&res, o.State[int(i)*SizeAccount:int(i)*SizeAccount+SizeAccount])
 	if err != nil {
