@@ -19,7 +19,6 @@ package rollup
 import (
 	"bytes"
 	"hash"
-	"math/big"
 
 	"github.com/consensys/gnark-crypto/accumulator/merkletree"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
@@ -116,19 +115,6 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 		return ErrIndexConsistency
 	}
 
-	// read receiver's account
-	b = t.receiverPubKey.A.X.Bytes()
-	if posReceiver, ok = o.AccountMap[string(b[:])]; !ok {
-		return ErrNonExistingAccount
-	}
-	receiverAccount, err := o.readAccount(posReceiver)
-	if err != nil {
-		return err
-	}
-	if receiverAccount.index != posReceiver {
-		return ErrIndexConsistency
-	}
-
 	// set witnesses for the leaves
 	o.witnesses.LeafReceiver[numTransfer] = posReceiver
 	o.witnesses.LeafSender[numTransfer] = posSender
@@ -136,17 +122,11 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 	// set witnesses for the public keys
 	o.witnesses.PublicKeysSender[numTransfer].A.X = senderAccount.pubKey.A.X
 	o.witnesses.PublicKeysSender[numTransfer].A.Y = senderAccount.pubKey.A.Y
-	o.witnesses.PublicKeysReceiver[numTransfer].A.X = receiverAccount.pubKey.A.X
-	o.witnesses.PublicKeysReceiver[numTransfer].A.Y = receiverAccount.pubKey.A.Y
 
 	// set witnesses for the accounts before update
 	o.witnesses.SenderAccountsBefore[numTransfer].ProcessID = senderAccount.index
 	o.witnesses.SenderAccountsBefore[numTransfer].CensusRoot = senderAccount.nonce
 	o.witnesses.SenderAccountsBefore[numTransfer].BallotMode = senderAccount.balance
-
-	o.witnesses.ReceiverAccountsBefore[numTransfer].ProcessID = receiverAccount.index
-	o.witnesses.ReceiverAccountsBefore[numTransfer].CensusRoot = receiverAccount.nonce
-	o.witnesses.ReceiverAccountsBefore[numTransfer].BallotMode = receiverAccount.balance
 
 	//  Set witnesses for the proof of inclusion of sender and receivers account before update
 	var buf bytes.Buffer
@@ -196,14 +176,6 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 		return ErrWrongSignature
 	}
 
-	// checks if the amount is correct
-	var bAmount, bBalance big.Int
-	receiverAccount.balance.BigInt(&bBalance)
-	t.amount.BigInt(&bAmount)
-	if bAmount.Cmp(&bBalance) == 1 {
-		return ErrAmountTooHigh
-	}
-
 	// check if the nonce is correct
 	if t.nonce != senderAccount.nonce {
 		return ErrNonce
@@ -211,16 +183,11 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 
 	// update balances
 	senderAccount.balance.Sub(&senderAccount.balance, &t.amount)
-	receiverAccount.balance.Add(&receiverAccount.balance, &t.amount)
 
 	// update the nonce of the sender
 	senderAccount.nonce++
 
 	// set the witnesses for the account after update
-	o.witnesses.ReceiverAccountsAfter[numTransfer].ProcessID = receiverAccount.index
-	o.witnesses.ReceiverAccountsAfter[numTransfer].CensusRoot = receiverAccount.nonce
-	o.witnesses.ReceiverAccountsAfter[numTransfer].BallotMode = receiverAccount.balance
-
 	o.witnesses.SenderAccountsAfter[numTransfer].ProcessID = senderAccount.index
 	o.witnesses.SenderAccountsAfter[numTransfer].CensusRoot = senderAccount.nonce
 	o.witnesses.SenderAccountsAfter[numTransfer].BallotMode = senderAccount.balance
@@ -231,12 +198,6 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 	_, _ = o.h.Write(senderAccount.Serialize())
 	bufSender := o.h.Sum([]byte{})
 	copy(o.HashState[int(posSender)*o.h.Size():(int(posSender)+1)*o.h.Size()], bufSender)
-
-	copy(o.State[int(posReceiver)*SizeAccount:], receiverAccount.Serialize())
-	o.h.Reset()
-	_, _ = o.h.Write(receiverAccount.Serialize())
-	bufReceiver := o.h.Sum([]byte{})
-	copy(o.HashState[int(posReceiver)*o.h.Size():(int(posReceiver)+1)*o.h.Size()], bufReceiver)
 
 	//  Set witnesses for the proof of inclusion of sender and receivers account after update
 	buf.Reset()
