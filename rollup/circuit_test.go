@@ -41,7 +41,7 @@ func (t *circuitSignature) Define(api frontend.API) error {
 	if err != nil {
 		return err
 	}
-	return verifyTransferSignature(api, t.Transfers[0], hFunc)
+	return verifyVoteSignature(api, t.Votes[0], hFunc)
 }
 
 func TestCircuitSignature(t *testing.T) {
@@ -81,8 +81,6 @@ func TestCircuitSignature(t *testing.T) {
 
 	var signatureCircuit circuitSignature
 	for i := 0; i < BatchSizeCircuit; i++ {
-		signatureCircuit.MerkleProofReceiverBefore[i].Path = make([]frontend.Variable, depth)
-		signatureCircuit.MerkleProofReceiverAfter[i].Path = make([]frontend.Variable, depth)
 		signatureCircuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
 		signatureCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
 	}
@@ -98,8 +96,6 @@ func (t *circuitInclusionProof) Define(api frontend.API) error {
 		return err
 	}
 
-	t.MerkleProofReceiverBefore[0].VerifyProof(api, &hashFunc, t.LeafReceiver[0])
-	t.MerkleProofReceiverAfter[0].VerifyProof(api, &hashFunc, t.LeafReceiver[0])
 	t.MerkleProofSenderBefore[0].VerifyProof(api, &hashFunc, t.LeafSender[0])
 	t.MerkleProofSenderAfter[0].VerifyProof(api, &hashFunc, t.LeafSender[0])
 
@@ -146,8 +142,6 @@ func TestCircuitInclusionProof(t *testing.T) {
 	// we allocate the slices of the circuit before compiling it
 	var inclusionProofCircuit circuitInclusionProof
 	for i := 0; i < BatchSizeCircuit; i++ {
-		inclusionProofCircuit.MerkleProofReceiverBefore[i].Path = make([]frontend.Variable, depth)
-		inclusionProofCircuit.MerkleProofReceiverAfter[i].Path = make([]frontend.Variable, depth)
 		inclusionProofCircuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
 		inclusionProofCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
 	}
@@ -168,8 +162,8 @@ func (t *circuitUpdateAccount) Define(api frontend.API) error {
 		return err
 	}
 
-	verifyAccountUpdated(api, t.SenderAccountsBefore[0], t.ReceiverAccountsBefore[0],
-		t.SenderAccountsAfter[0], t.ReceiverAccountsAfter[0], t.Transfers[0].Amount)
+	verifyProcessUpdate(api, t.ProcessBefore[0], t.ProcessAfter[0],
+		t.Votes[0].ChoicesAdd, t.Votes[0].ChoicesSub)
 	return nil
 }
 
@@ -254,8 +248,6 @@ func TestCircuitFull(t *testing.T) {
 
 	var rollupCircuit Circuit
 	for i := 0; i < BatchSizeCircuit; i++ {
-		rollupCircuit.MerkleProofReceiverBefore[i].Path = make([]frontend.Variable, depth)
-		rollupCircuit.MerkleProofReceiverAfter[i].Path = make([]frontend.Variable, depth)
 		rollupCircuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
 		rollupCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
 	}
@@ -305,8 +297,6 @@ func TestCircuitCompile(t *testing.T) {
 	// we allocate the slices of the circuit before compiling it
 	var inclusionProofCircuit Circuit
 	for i := 0; i < BatchSizeCircuit; i++ {
-		inclusionProofCircuit.MerkleProofReceiverBefore[i].Path = make([]frontend.Variable, depth)
-		inclusionProofCircuit.MerkleProofReceiverAfter[i].Path = make([]frontend.Variable, depth)
 		inclusionProofCircuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
 		inclusionProofCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
 	}
