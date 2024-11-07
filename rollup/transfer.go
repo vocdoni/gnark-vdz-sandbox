@@ -23,33 +23,29 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards/eddsa"
 )
 
-// Transfer describe a rollup transfer
-type Transfer struct {
-	nonce          uint64
-	amount         fr.Element
-	senderPubKey   eddsa.PublicKey
-	receiverPubKey eddsa.PublicKey
-	signature      eddsa.Signature // signature of the sender's account
+// Vote describe a rollup transfer
+type Vote struct {
+	nonce        uint64
+	amount       fr.Element
+	senderPubKey eddsa.PublicKey
+	signature    eddsa.Signature // signature of the sender's account
 }
 
-// NewTransfer creates a new transfer (to be signed)
-func NewTransfer(amount uint64, from, to eddsa.PublicKey, nonce uint64) Transfer {
-
-	var res Transfer
+// NewVote creates a new transfer (to be signed)
+func NewVote(amount uint64, from, _ eddsa.PublicKey, nonce uint64) Vote {
+	var res Vote
 
 	res.nonce = nonce
 	res.amount.SetUint64(amount)
 	res.senderPubKey = from
-	res.receiverPubKey = to
 
 	return res
 }
 
 // Sign signs a transaction
-func (t *Transfer) Sign(priv eddsa.PrivateKey, h hash.Hash) (eddsa.Signature, error) {
-
+func (t *Vote) Sign(priv eddsa.PrivateKey, h hash.Hash) (eddsa.Signature, error) {
 	h.Reset()
-	//var frNonce, msg fr.Element
+	// var frNonce, msg fr.Element
 	var frNonce fr.Element
 
 	// serializing transfer. The signature is on h(nonce ∥ amount ∥ senderpubKey (x&y) ∥ receiverPubkey(x&y))
@@ -63,12 +59,8 @@ func (t *Transfer) Sign(priv eddsa.PrivateKey, h hash.Hash) (eddsa.Signature, er
 	_, _ = h.Write(b[:])
 	b = t.senderPubKey.A.Y.Bytes()
 	_, _ = h.Write(b[:])
-	b = t.receiverPubKey.A.X.Bytes()
-	_, _ = h.Write(b[:])
-	b = t.receiverPubKey.A.Y.Bytes()
-	_, _ = h.Write(b[:])
 	msg := h.Sum([]byte{})
-	//msg.SetBytes(bmsg)
+	// msg.SetBytes(bmsg)
 
 	sigBin, err := priv.Sign(msg, hFunc)
 	if err != nil {
@@ -84,10 +76,9 @@ func (t *Transfer) Sign(priv eddsa.PrivateKey, h hash.Hash) (eddsa.Signature, er
 
 // Verify verifies the signature of the transfer.
 // The message to sign is the hash (o.h) of the account.
-func (t *Transfer) Verify(h hash.Hash) (bool, error) {
-
+func (t *Vote) Verify(h hash.Hash) (bool, error) {
 	h.Reset()
-	//var frNonce, msg fr.Element
+	// var frNonce, msg fr.Element
 	var frNonce fr.Element
 
 	// serializing transfer. The msg to sign is
@@ -102,12 +93,8 @@ func (t *Transfer) Verify(h hash.Hash) (bool, error) {
 	_, _ = h.Write(b[:])
 	b = t.senderPubKey.A.Y.Bytes()
 	_, _ = h.Write(b[:])
-	b = t.receiverPubKey.A.X.Bytes()
-	_, _ = h.Write(b[:])
-	b = t.receiverPubKey.A.Y.Bytes()
-	_, _ = h.Write(b[:])
 	msg := h.Sum([]byte{})
-	//msg.SetBytes(bmsg)
+	// msg.SetBytes(bmsg)
 
 	// verification of the signature
 	resSig, err := t.senderPubKey.Verify(t.signature.Bytes(), msg, hFunc)

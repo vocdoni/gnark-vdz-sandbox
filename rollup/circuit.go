@@ -38,17 +38,17 @@ type Circuit struct {
 	// SECRET INPUTS
 
 	// list of accounts involved before update and their public keys
-	SenderAccountsBefore   [BatchSizeCircuit]AccountConstraints
-	ReceiverAccountsBefore [BatchSizeCircuit]AccountConstraints
+	SenderAccountsBefore   [BatchSizeCircuit]ProcessConstraints
+	ReceiverAccountsBefore [BatchSizeCircuit]ProcessConstraints
 	PublicKeysSender       [BatchSizeCircuit]eddsa.PublicKey
 
 	// list of accounts involved after update and their public keys
-	SenderAccountsAfter   [BatchSizeCircuit]AccountConstraints
-	ReceiverAccountsAfter [BatchSizeCircuit]AccountConstraints
+	SenderAccountsAfter   [BatchSizeCircuit]ProcessConstraints
+	ReceiverAccountsAfter [BatchSizeCircuit]ProcessConstraints
 	PublicKeysReceiver    [BatchSizeCircuit]eddsa.PublicKey
 
 	// list of transactions
-	Transfers [BatchSizeCircuit]TransferConstraints
+	Transfers [BatchSizeCircuit]VoteConstraints
 
 	// list of proofs corresponding to sender and receiver accounts
 	MerkleProofReceiverBefore [BatchSizeCircuit]merkle.MerkleProof
@@ -66,16 +66,16 @@ type Circuit struct {
 	RootHashesAfter  [BatchSizeCircuit]frontend.Variable `gnark:",public"`
 }
 
-// AccountConstraints accounts encoded as constraints
-type AccountConstraints struct {
-	Index   frontend.Variable // index in the tree
-	Nonce   frontend.Variable // nb transactions done so far from this account
-	Balance frontend.Variable
-	PubKey  eddsa.PublicKey `gnark:"-"`
+// ProcessConstraints represents the process encoded as constraints
+type ProcessConstraints struct {
+	ProcessID     frontend.Variable
+	CensusRoot    frontend.Variable
+	BallotMode    frontend.Variable
+	EncryptionKey eddsa.PublicKey `gnark:"-"`
 }
 
-// TransferConstraints transfer encoded as constraints
-type TransferConstraints struct {
+// VoteConstraints represents a vote encoded as constraints
+type VoteConstraints struct {
 	Amount         frontend.Variable
 	Nonce          frontend.Variable `gnark:"-"`
 	SenderPubKey   eddsa.PublicKey   `gnark:"-"`
@@ -87,19 +87,19 @@ func (circuit *Circuit) postInit(api frontend.API) error {
 	for i := 0; i < BatchSizeCircuit; i++ {
 
 		// setting the sender accounts before update
-		circuit.SenderAccountsBefore[i].PubKey = circuit.PublicKeysSender[i]
+		circuit.SenderAccountsBefore[i].EncryptionKey = circuit.PublicKeysSender[i]
 
 		// setting the sender accounts after update
-		circuit.SenderAccountsAfter[i].PubKey = circuit.PublicKeysSender[i]
+		circuit.SenderAccountsAfter[i].EncryptionKey = circuit.PublicKeysSender[i]
 
 		// setting the receiver accounts before update
-		circuit.ReceiverAccountsBefore[i].PubKey = circuit.PublicKeysReceiver[i]
+		circuit.ReceiverAccountsBefore[i].EncryptionKey = circuit.PublicKeysReceiver[i]
 
 		// setting the receiver accounts after update
-		circuit.ReceiverAccountsAfter[i].PubKey = circuit.PublicKeysReceiver[i]
+		circuit.ReceiverAccountsAfter[i].EncryptionKey = circuit.PublicKeysReceiver[i]
 
 		// setting the transfers
-		circuit.Transfers[i].Nonce = circuit.SenderAccountsBefore[i].Nonce
+		circuit.Transfers[i].Nonce = circuit.SenderAccountsBefore[i].CensusRoot
 		circuit.Transfers[i].SenderPubKey = circuit.PublicKeysSender[i]
 		circuit.Transfers[i].ReceiverPubKey = circuit.PublicKeysReceiver[i]
 
@@ -144,10 +144,10 @@ func (circuit Circuit) Define(api frontend.API) error {
 		api.AssertIsEqual(circuit.RootHashesAfter[i], circuit.MerkleProofSenderAfter[i].RootHash)
 
 		// the leafs of the Merkle proofs must match the index of the accounts
-		api.AssertIsEqual(circuit.ReceiverAccountsBefore[i].Index, circuit.LeafReceiver[i])
-		api.AssertIsEqual(circuit.ReceiverAccountsAfter[i].Index, circuit.LeafReceiver[i])
-		api.AssertIsEqual(circuit.SenderAccountsBefore[i].Index, circuit.LeafSender[i])
-		api.AssertIsEqual(circuit.SenderAccountsAfter[i].Index, circuit.LeafSender[i])
+		api.AssertIsEqual(circuit.ReceiverAccountsBefore[i].ProcessID, circuit.LeafReceiver[i])
+		api.AssertIsEqual(circuit.ReceiverAccountsAfter[i].ProcessID, circuit.LeafReceiver[i])
+		api.AssertIsEqual(circuit.SenderAccountsBefore[i].ProcessID, circuit.LeafSender[i])
+		api.AssertIsEqual(circuit.SenderAccountsAfter[i].ProcessID, circuit.LeafSender[i])
 
 		// verify the inclusion proofs
 		circuit.MerkleProofReceiverBefore[i].VerifyProof(api, &hFunc, circuit.LeafReceiver[i])
@@ -169,7 +169,7 @@ func (circuit Circuit) Define(api frontend.API) error {
 }
 
 // verifyTransferSignature ensures that the signature of the transfer is valid
-func verifyTransferSignature(api frontend.API, t TransferConstraints, hFunc mimc.MiMC) error {
+func verifyTransferSignature(api frontend.API, t VoteConstraints, hFunc mimc.MiMC) error {
 	// Reset the hash state!
 	hFunc.Reset()
 
@@ -190,19 +190,19 @@ func verifyTransferSignature(api frontend.API, t TransferConstraints, hFunc mimc
 	return nil
 }
 
-func verifyAccountUpdated(api frontend.API, from, to, fromUpdated, toUpdated AccountConstraints, amount frontend.Variable) {
+func verifyAccountUpdated(api frontend.API, from, to, fromUpdated, toUpdated ProcessConstraints, amount frontend.Variable) {
 	// ensure that nonce is correctly updated
-	nonceUpdated := api.Add(from.Nonce, 1)
-	api.AssertIsEqual(nonceUpdated, fromUpdated.Nonce)
-	api.AssertIsEqual(to.Nonce, toUpdated.Nonce)
+	nonceUpdated := api.Add(from.CensusRoot, 1)
+	api.AssertIsEqual(nonceUpdated, fromUpdated.CensusRoot)
+	api.AssertIsEqual(to.CensusRoot, toUpdated.CensusRoot)
 
 	// ensures that the amount is less than the balance
-	api.AssertIsLessOrEqual(amount, from.Balance)
+	api.AssertIsLessOrEqual(amount, from.BallotMode)
 
 	// ensure that balance is correctly updated
-	fromBalanceUpdated := api.Sub(from.Balance, amount)
-	api.AssertIsEqual(fromBalanceUpdated, fromUpdated.Balance)
+	fromBalanceUpdated := api.Sub(from.BallotMode, amount)
+	api.AssertIsEqual(fromBalanceUpdated, fromUpdated.BallotMode)
 
-	toBalanceUpdated := api.Add(to.Balance, amount)
-	api.AssertIsEqual(toBalanceUpdated, toUpdated.Balance)
+	toBalanceUpdated := api.Add(to.BallotMode, amount)
+	api.AssertIsEqual(toBalanceUpdated, toUpdated.BallotMode)
 }

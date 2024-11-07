@@ -21,15 +21,14 @@ import (
 )
 
 func TestAccount(t *testing.T) {
-
-	var acc Account
+	var acc Voter
 	acc.Reset()
 	acc.balance.SetString("1900")
 	acc.nonce = 1
 	acc.index = 2
 
 	serializedAccount := acc.Serialize()
-	var deserializedAccount Account
+	var deserializedAccount Voter
 	err := Deserialize(&deserializedAccount, serializedAccount)
 	if err != nil {
 		t.Fatal(err)
@@ -59,5 +58,4 @@ func TestAccount(t *testing.T) {
 	if err == nil {
 		t.Fatal("Deserializing byte slice with wrong size should raise an error")
 	}
-
 }

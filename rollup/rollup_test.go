@@ -29,7 +29,6 @@ import (
 // involved here.
 
 func TestOperatorReadAccount(t *testing.T) {
-
 	// create operator with 10 accounts
 	operator, _ := createOperator(10)
 
@@ -39,16 +38,14 @@ func TestOperatorReadAccount(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		acc, _ := createAccount(i)
+		acc, _ := createVoter(i)
 
 		compareAccount(t, acc, opAccount)
 
 	}
-
 }
 
 func TestSignTransfer(t *testing.T) {
-
 	var amount uint64
 
 	// create operator with 10 accounts
@@ -66,14 +63,14 @@ func TestSignTransfer(t *testing.T) {
 
 	// create the transfer and sign it (the hash used for signing is the hash function of the operator)
 	amount = 10
-	transfer := NewTransfer(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	vote := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
 
 	// verify correct signature
-	_, err = transfer.Sign(userKeys[0], operator.h)
+	_, err = vote.Sign(userKeys[0], operator.h)
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := transfer.Verify(operator.h)
+	res, err := vote.Verify(operator.h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,18 +79,17 @@ func TestSignTransfer(t *testing.T) {
 	}
 
 	// verify wrong signature
-	_, err = transfer.Sign(userKeys[1], operator.h)
+	_, err = vote.Sign(userKeys[1], operator.h)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = transfer.Verify(operator.h)
+	_, err = vote.Verify(operator.h)
 	if err == nil {
 		t.Fatal("Verifying transaction signed with the wrong key should output an error")
 	}
 }
 
 func TestOperatorUpdateAccount(t *testing.T) {
-
 	var amount uint64
 
 	// create operator with 10 accounts
@@ -112,7 +108,7 @@ func TestOperatorUpdateAccount(t *testing.T) {
 
 	// create the transfer and sign it
 	amount = 10
-	transfer := NewTransfer(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
 	transfer.Sign(userKeys[0], operator.h)
 
 	err = operator.updateState(transfer, 0)
@@ -143,9 +139,8 @@ func TestOperatorUpdateAccount(t *testing.T) {
 	compareHashAccount(t, operator.HashState[operator.h.Size():2*operator.h.Size()], newReceiver, operator.h)
 }
 
-func createAccount(i int) (Account, eddsa.PrivateKey) {
-
-	var acc Account
+func createVoter(i int) (Voter, eddsa.PrivateKey) {
+	var acc Voter
 	var rnd fr.Element
 	var privkey eddsa.PrivateKey
 
@@ -169,18 +164,17 @@ func createAccount(i int) (Account, eddsa.PrivateKey) {
 }
 
 // Returns a newly created operator and the private keys of the associated accounts
-func createOperator(nbAccounts int) (Operator, []eddsa.PrivateKey) {
-
-	operator := NewOperator(nbAccounts)
+func createOperator(nbVoters int) (Operator, []eddsa.PrivateKey) {
+	operator := NewOperator(nbVoters)
 
 	operator.witnesses.allocateSlicesMerkleProofs()
 
-	userAccounts := make([]eddsa.PrivateKey, nbAccounts)
+	userAccounts := make([]eddsa.PrivateKey, nbVoters)
 
 	// randomly fill the accounts
-	for i := 0; i < nbAccounts; i++ {
+	for i := 0; i < nbVoters; i++ {
 
-		acc, privkey := createAccount(i)
+		acc, privkey := createVoter(i)
 
 		// fill the index map of the operator
 		b := acc.pubKey.A.X.Bytes()
@@ -200,11 +194,9 @@ func createOperator(nbAccounts int) (Operator, []eddsa.PrivateKey) {
 	}
 
 	return operator, userAccounts
-
 }
 
-func compareAccount(t *testing.T, acc1, acc2 Account) {
-
+func compareAccount(t *testing.T, acc1, acc2 Voter) {
 	if acc1.index != acc2.index {
 		t.Fatal("Incorrect index")
 	}
@@ -220,11 +212,9 @@ func compareAccount(t *testing.T, acc1, acc2 Account) {
 	if !acc1.pubKey.A.Y.Equal(&acc2.pubKey.A.Y) {
 		t.Fatal("Incorrect public key (Y)")
 	}
-
 }
 
-func compareHashAccount(t *testing.T, h []byte, acc Account, hFunc hash.Hash) {
-
+func compareHashAccount(t *testing.T, h []byte, acc Voter, hFunc hash.Hash) {
 	hFunc.Reset()
 	_, err := hFunc.Write(acc.Serialize())
 	if err != nil {

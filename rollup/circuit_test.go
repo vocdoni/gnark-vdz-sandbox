@@ -17,6 +17,7 @@ limitations under the License.
 package rollup
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -24,6 +25,7 @@ import (
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
+	"github.com/consensys/gnark/profile"
 	"github.com/consensys/gnark/std/hash/mimc"
 	"github.com/consensys/gnark/test"
 )
@@ -60,7 +62,7 @@ func TestCircuitSignature(t *testing.T) {
 
 	// create the transfer and sign it
 	amount := uint64(10)
-	transfer := NewTransfer(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -124,7 +126,7 @@ func TestCircuitInclusionProof(t *testing.T) {
 
 	// create the transfer and sign it
 	amount := uint64(16)
-	transfer := NewTransfer(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -191,7 +193,7 @@ func TestCircuitUpdateAccount(t *testing.T) {
 
 	// create the transfer and sign it
 	amount := uint64(10)
-	transfer := NewTransfer(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -233,7 +235,7 @@ func TestCircuitFull(t *testing.T) {
 
 	// create the transfer and sign it
 	amount := uint64(10)
-	transfer := NewTransfer(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -286,7 +288,7 @@ func TestCircuitCompile(t *testing.T) {
 
 	// create the transfer and sign it
 	amount := uint64(16)
-	transfer := NewTransfer(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -301,18 +303,22 @@ func TestCircuitCompile(t *testing.T) {
 	}
 
 	// we allocate the slices of the circuit before compiling it
-	var inclusionProofCircuit circuitInclusionProof
+	var inclusionProofCircuit Circuit
 	for i := 0; i < BatchSizeCircuit; i++ {
 		inclusionProofCircuit.MerkleProofReceiverBefore[i].Path = make([]frontend.Variable, depth)
 		inclusionProofCircuit.MerkleProofReceiverAfter[i].Path = make([]frontend.Variable, depth)
 		inclusionProofCircuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
 		inclusionProofCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
 	}
+	p := profile.Start()
 
 	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &inclusionProofCircuit)
 	if err != nil {
 		panic(err)
 	}
+	p.Stop()
+	fmt.Println("constraints", p.NbConstraints())
+
 	// groth16 zkSNARK: Setup
 	pk, vk, err := groth16.Setup(ccs)
 	if err != nil {

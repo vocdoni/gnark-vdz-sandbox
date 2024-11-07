@@ -32,12 +32,12 @@ var BatchSize = 10
 
 // Queue queue for storing the transfers (fixed size queue)
 type Queue struct {
-	listTransfers chan Transfer
+	listTransfers chan Vote
 }
 
 // NewQueue creates a new queue, BatchSizeCircuit is the capacity
 func NewQueue(BatchSizeCircuit int) Queue {
-	resChan := make(chan Transfer, BatchSizeCircuit)
+	resChan := make(chan Vote, BatchSizeCircuit)
 	var res Queue
 	res.listTransfers = resChan
 	return res
@@ -85,8 +85,8 @@ func (o *Operator) Witnesses() Circuit {
 }
 
 // readAccount reads the account located at index i
-func (o *Operator) readAccount(i uint64) (Account, error) {
-	var res Account
+func (o *Operator) readAccount(i uint64) (Voter, error) {
+	var res Voter
 	err := Deserialize(&res, o.State[int(i)*SizeAccount:int(i)*SizeAccount+SizeAccount])
 	if err != nil {
 		return res, err
@@ -96,7 +96,7 @@ func (o *Operator) readAccount(i uint64) (Account, error) {
 
 // updateState updates the state according to transfer
 // numTransfer is the number of the transfer currently handled (between 0 and BatchSizeCircuit)
-func (o *Operator) updateState(t Transfer, numTransfer int) error {
+func (o *Operator) updateState(t Vote, numTransfer int) error {
 	var posSender, posReceiver uint64
 	var ok bool
 
@@ -140,13 +140,13 @@ func (o *Operator) updateState(t Transfer, numTransfer int) error {
 	o.witnesses.PublicKeysReceiver[numTransfer].A.Y = receiverAccount.pubKey.A.Y
 
 	// set witnesses for the accounts before update
-	o.witnesses.SenderAccountsBefore[numTransfer].Index = senderAccount.index
-	o.witnesses.SenderAccountsBefore[numTransfer].Nonce = senderAccount.nonce
-	o.witnesses.SenderAccountsBefore[numTransfer].Balance = senderAccount.balance
+	o.witnesses.SenderAccountsBefore[numTransfer].ProcessID = senderAccount.index
+	o.witnesses.SenderAccountsBefore[numTransfer].CensusRoot = senderAccount.nonce
+	o.witnesses.SenderAccountsBefore[numTransfer].BallotMode = senderAccount.balance
 
-	o.witnesses.ReceiverAccountsBefore[numTransfer].Index = receiverAccount.index
-	o.witnesses.ReceiverAccountsBefore[numTransfer].Nonce = receiverAccount.nonce
-	o.witnesses.ReceiverAccountsBefore[numTransfer].Balance = receiverAccount.balance
+	o.witnesses.ReceiverAccountsBefore[numTransfer].ProcessID = receiverAccount.index
+	o.witnesses.ReceiverAccountsBefore[numTransfer].CensusRoot = receiverAccount.nonce
+	o.witnesses.ReceiverAccountsBefore[numTransfer].BallotMode = receiverAccount.balance
 
 	//  Set witnesses for the proof of inclusion of sender and receivers account before update
 	var buf bytes.Buffer
@@ -217,13 +217,13 @@ func (o *Operator) updateState(t Transfer, numTransfer int) error {
 	senderAccount.nonce++
 
 	// set the witnesses for the account after update
-	o.witnesses.ReceiverAccountsAfter[numTransfer].Index = receiverAccount.index
-	o.witnesses.ReceiverAccountsAfter[numTransfer].Nonce = receiverAccount.nonce
-	o.witnesses.ReceiverAccountsAfter[numTransfer].Balance = receiverAccount.balance
+	o.witnesses.ReceiverAccountsAfter[numTransfer].ProcessID = receiverAccount.index
+	o.witnesses.ReceiverAccountsAfter[numTransfer].CensusRoot = receiverAccount.nonce
+	o.witnesses.ReceiverAccountsAfter[numTransfer].BallotMode = receiverAccount.balance
 
-	o.witnesses.SenderAccountsAfter[numTransfer].Index = senderAccount.index
-	o.witnesses.SenderAccountsAfter[numTransfer].Nonce = senderAccount.nonce
-	o.witnesses.SenderAccountsAfter[numTransfer].Balance = senderAccount.balance
+	o.witnesses.SenderAccountsAfter[numTransfer].ProcessID = senderAccount.index
+	o.witnesses.SenderAccountsAfter[numTransfer].CensusRoot = senderAccount.nonce
+	o.witnesses.SenderAccountsAfter[numTransfer].BallotMode = senderAccount.balance
 
 	// update the state of the operator
 	copy(o.State[int(posSender)*SizeAccount:], senderAccount.Serialize())

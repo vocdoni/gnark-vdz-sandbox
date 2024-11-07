@@ -23,14 +23,12 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards/eddsa"
 )
 
-var (
-	// SizeAccount byte size of a serialized account (5*32bytes)
-	// index ∥ nonce ∥ balance ∥ pubkeyX ∥ pubkeyY, each chunk is 32 bytes
-	SizeAccount = 160
-)
+// SizeAccount byte size of a serialized account (5*32bytes)
+// index ∥ nonce ∥ balance ∥ pubkeyX ∥ pubkeyY, each chunk is 32 bytes
+var SizeAccount = 160
 
-// Account describes a rollup account
-type Account struct {
+// Voter describes a rollup account
+type Voter struct {
 	index   uint64 // index in the tree
 	nonce   uint64 // nb transactions done so far from this account
 	balance fr.Element
@@ -38,7 +36,7 @@ type Account struct {
 }
 
 // Reset resets an account
-func (ac *Account) Reset() {
+func (ac *Voter) Reset() {
 	ac.index = 0
 	ac.nonce = 0
 	ac.balance.SetZero()
@@ -49,9 +47,8 @@ func (ac *Account) Reset() {
 // Serialize serializes the account as a concatenation of 5 chunks of 256 bits
 // one chunk per field (pubKey has 2 chunks), except index and nonce that are concatenated in a single 256 bits chunk
 // index ∥ nonce ∥ balance ∥ pubkeyX ∥ pubkeyY, each chunk is 256 bits
-func (ac *Account) Serialize() []byte {
-
-	//var buffer bytes.Buffer
+func (ac *Voter) Serialize() []byte {
+	// var buffer bytes.Buffer
 	var res [160]byte
 
 	// first chunk of 256 bits
@@ -72,8 +69,7 @@ func (ac *Account) Serialize() []byte {
 }
 
 // Deserialize deserializes a stream of byte in an account
-func Deserialize(res *Account, data []byte) error {
-
+func Deserialize(res *Voter, data []byte) error {
 	res.Reset()
 
 	// memory bound check
