@@ -42,8 +42,7 @@ type Circuit struct {
 	PublicKeysSender [BatchSizeCircuit]eddsa.PublicKey
 
 	// list of accounts involved after update and their public keys
-	ProcessAfter       [BatchSizeCircuit]ProcessConstraints
-	PublicKeysReceiver [BatchSizeCircuit]eddsa.PublicKey
+	ProcessAfter [BatchSizeCircuit]ProcessConstraints
 
 	// list of votes
 	Votes [BatchSizeCircuit]VoteConstraints
@@ -61,6 +60,52 @@ type Circuit struct {
 	RootHashesAfter  [BatchSizeCircuit]frontend.Variable `gnark:",public"`
 }
 
+type DebugCircuit struct {
+	// ---------------------------------------------------------------------------------------------
+	// SECRET INPUTS
+
+	// // list of accounts involved before update and their public keys
+	// ProcessBefore    [BatchSizeCircuit]ProcessConstraints
+	// PublicKeysSender [BatchSizeCircuit]eddsa.PublicKey
+
+	// // list of accounts involved after update and their public keys
+	// ProcessAfter       [BatchSizeCircuit]ProcessConstraints
+	// PublicKeysReceiver [BatchSizeCircuit]eddsa.PublicKey
+
+	// // list of votes
+	// Votes [BatchSizeCircuit]VoteConstraints
+
+	// // list of proofs corresponding to sender and receiver accounts
+	MerkleProofSenderBefore [BatchSizeCircuit]merkle.MerkleProof
+	MerkleProofSenderAfter  [BatchSizeCircuit]merkle.MerkleProof
+	LeafSender              [BatchSizeCircuit]frontend.Variable
+
+	// ---------------------------------------------------------------------------------------------
+	// PUBLIC INPUTS
+
+	// list of root hashes
+	RootHashesBefore [BatchSizeCircuit]frontend.Variable `gnark:",public"`
+	RootHashesAfter  [BatchSizeCircuit]frontend.Variable `gnark:",public"`
+}
+
+// Define declares the circuit's constraints
+func (circuit DebugCircuit) Define(api frontend.API) error {
+	// hash function for the merkle proof and the eddsa signature
+	// verifications of:
+	// - Merkle proofs of the accounts
+	// - the signatures
+	// - accounts' balance consistency
+	for i := 0; i < BatchSizeCircuit; i++ {
+
+		// the root hashes of the Merkle path must match the public ones given in the circuit
+		api.AssertIsEqual(circuit.RootHashesBefore[i], circuit.MerkleProofSenderBefore[i].RootHash)
+		api.AssertIsEqual(circuit.RootHashesAfter[i], circuit.MerkleProofSenderAfter[i].RootHash)
+
+	}
+
+	return nil
+}
+
 // ProcessConstraints represents the process encoded as constraints
 type ProcessConstraints struct {
 	ProcessID     frontend.Variable
@@ -73,15 +118,14 @@ type ProcessConstraints struct {
 
 // VoteConstraints represents a vote encoded as constraints
 type VoteConstraints struct {
-	ChoicesAdd     frontend.Variable
-	ChoicesSub     frontend.Variable
-	Nonce          frontend.Variable `gnark:"-"`
-	SenderPubKey   eddsa.PublicKey   `gnark:"-"`
-	ReceiverPubKey eddsa.PublicKey   `gnark:"-"`
-	Signature      eddsa.Signature
+	ChoicesAdd   frontend.Variable
+	ChoicesSub   frontend.Variable
+	Nonce        frontend.Variable `gnark:"-"`
+	SenderPubKey eddsa.PublicKey   `gnark:"-"`
+	Signature    eddsa.Signature
 }
 
-func (circuit *Circuit) postInit(api frontend.API) error {
+func (circuit *Circuit) PostInit(api frontend.API) error {
 	for i := 0; i < BatchSizeCircuit; i++ {
 
 		// setting the sender accounts before update
@@ -93,7 +137,6 @@ func (circuit *Circuit) postInit(api frontend.API) error {
 		// setting the transfers
 		circuit.Votes[i].Nonce = circuit.ProcessBefore[i].CensusRoot
 		circuit.Votes[i].SenderPubKey = circuit.PublicKeysSender[i]
-		circuit.Votes[i].ReceiverPubKey = circuit.PublicKeysReceiver[i]
 
 		// allocate the slices for the Merkle proofs
 		// circuit.allocateSlicesMerkleProofs()
@@ -112,7 +155,7 @@ func (circuit *Circuit) allocateSlicesMerkleProofs() {
 
 // Define declares the circuit's constraints
 func (circuit Circuit) Define(api frontend.API) error {
-	if err := circuit.postInit(api); err != nil {
+	if err := circuit.PostInit(api); err != nil {
 		return err
 	}
 	// hash function for the merkle proof and the eddsa signature
@@ -158,8 +201,8 @@ func verifyVoteSignature(api frontend.API, t VoteConstraints, hFunc mimc.MiMC) e
 	// Reset the hash state!
 	hFunc.Reset()
 
-	// the signature is on h(nonce ∥ amount ∥ senderpubKey (x&y) ∥ receiverPubkey(x&y))
-	hFunc.Write(t.Nonce, t.ChoicesAdd, t.SenderPubKey.A.X, t.SenderPubKey.A.Y, t.ReceiverPubKey.A.X, t.ReceiverPubKey.A.Y)
+	// the signature is on h(nonce ∥ amount ∥ senderpubKey (x&y))
+	hFunc.Write(t.Nonce, t.ChoicesAdd, t.SenderPubKey.A.X, t.SenderPubKey.A.Y)
 	htransfer := hFunc.Sum()
 
 	curve, err := twistededwards.NewEdCurve(api, tedwards.BN254)
@@ -179,7 +222,8 @@ func verifyProcessUpdate(api frontend.API, processBefore, processAfter ProcessCo
 	api.AssertIsEqual(processBefore.ProcessID, processAfter.ProcessID)
 	api.AssertIsEqual(processBefore.CensusRoot, processAfter.CensusRoot)
 	api.AssertIsEqual(processBefore.BallotMode, processAfter.BallotMode)
-	api.AssertIsEqual(processBefore.EncryptionKey, processAfter.EncryptionKey)
+	api.AssertIsEqual(processBefore.EncryptionKey.A.X, processAfter.EncryptionKey.A.X)
+	api.AssertIsEqual(processBefore.EncryptionKey.A.Y, processAfter.EncryptionKey.A.Y)
 
 	api.AssertIsEqual(api.Add(processBefore.ResultsAdd, add), processAfter.ResultsAdd)
 	api.AssertIsEqual(api.Add(processBefore.ResultsSub, sub), processAfter.ResultsSub)

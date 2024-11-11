@@ -34,7 +34,7 @@ func TestOperatorReadAccount(t *testing.T) {
 
 	// check if the account read from the operator is correct
 	for i := 0; i < 10; i++ {
-		opAccount, err := operator.readAccount(uint64(i))
+		opAccount, err := operator.ReadAccount(uint64(i))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,19 +51,19 @@ func TestSignTransfer(t *testing.T) {
 	// create operator with 10 accounts
 	operator, userKeys := createOperator(10)
 
-	sender, err := operator.readAccount(0)
+	sender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.readAccount(1)
+	receiver, err := operator.ReadAccount(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// create the transfer and sign it (the hash used for signing is the hash function of the operator)
 	amount = 10
-	vote := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	vote := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
 
 	// verify correct signature
 	_, err = vote.Sign(userKeys[0], operator.h)
@@ -96,19 +96,19 @@ func TestOperatorUpdateAccount(t *testing.T) {
 	operator, userKeys := createOperator(10)
 
 	// get info on the parties
-	sender, err := operator.readAccount(0)
+	sender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.readAccount(1)
+	receiver, err := operator.ReadAccount(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// create the transfer and sign it
 	amount = 10
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
 	transfer.Sign(userKeys[0], operator.h)
 
 	err = operator.updateState(transfer, 0)
@@ -117,18 +117,18 @@ func TestOperatorUpdateAccount(t *testing.T) {
 	}
 
 	// read the updated accounts of the sender and receiver and check if they are updated correctly
-	newSender, err := operator.readAccount(0)
+	newSender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newReceiver, err := operator.readAccount(1)
+	newReceiver, err := operator.ReadAccount(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var frAmount fr.Element
 	frAmount.SetUint64(amount)
 
-	sender.nonce++
+	sender.censusRoot++
 	sender.balance.Sub(&sender.balance, &frAmount)
 	receiver.balance.Add(&receiver.balance, &frAmount)
 
@@ -146,7 +146,7 @@ func createVoter(i int) (Voter, eddsa.PrivateKey) {
 
 	// create account, the i-th account has a balance of 20+i
 	acc.index = uint64(i)
-	acc.nonce = uint64(i)
+	acc.censusRoot = uint64(i)
 	acc.balance.SetUint64(uint64(i) + 20)
 	rnd.SetUint64(uint64(i))
 	src := rand.NewSource(int64(i))
@@ -167,7 +167,7 @@ func createVoter(i int) (Voter, eddsa.PrivateKey) {
 func createOperator(nbVoters int) (Operator, []eddsa.PrivateKey) {
 	operator := NewOperator(nbVoters)
 
-	operator.witnesses.allocateSlicesMerkleProofs()
+	operator.Witnesses.allocateSlicesMerkleProofs()
 
 	userAccounts := make([]eddsa.PrivateKey, nbVoters)
 
@@ -200,7 +200,7 @@ func compareAccount(t *testing.T, acc1, acc2 Voter) {
 	if acc1.index != acc2.index {
 		t.Fatal("Incorrect index")
 	}
-	if acc1.nonce != acc2.nonce {
+	if acc1.censusRoot != acc2.censusRoot {
 		t.Fatal("Incorrect nonce")
 	}
 	if !acc1.balance.Equal(&acc2.balance) {

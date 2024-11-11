@@ -24,7 +24,7 @@ func TestAccount(t *testing.T) {
 	var acc Voter
 	acc.Reset()
 	acc.balance.SetString("1900")
-	acc.nonce = 1
+	acc.censusRoot = 1
 	acc.index = 2
 
 	serializedAccount := acc.Serialize()
@@ -38,7 +38,7 @@ func TestAccount(t *testing.T) {
 	if deserializedAccount.index != acc.index {
 		t.Fatal("error deserializing index")
 	}
-	if deserializedAccount.nonce != acc.nonce {
+	if deserializedAccount.censusRoot != acc.censusRoot {
 		t.Fatal("error deserializing nonce")
 	}
 	if !deserializedAccount.balance.Equal(&acc.balance) {

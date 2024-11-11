@@ -17,6 +17,7 @@ limitations under the License.
 package rollup
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -34,7 +35,7 @@ type circuitSignature Circuit
 
 // Circuit implements part of the rollup circuit only by declaring a subset of the constraints
 func (t *circuitSignature) Define(api frontend.API) error {
-	if err := (*Circuit)(t).postInit(api); err != nil {
+	if err := (*Circuit)(t).PostInit(api); err != nil {
 		return err
 	}
 	hFunc, err := mimc.NewMiMC(api)
@@ -50,19 +51,19 @@ func TestCircuitSignature(t *testing.T) {
 	operator, users := createOperator(nbAccounts)
 
 	// read accounts involved in the transfer
-	sender, err := operator.readAccount(0)
+	sender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.readAccount(1)
+	receiver, err := operator.ReadAccount(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// create the transfer and sign it
 	amount := uint64(10)
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -85,7 +86,7 @@ func TestCircuitSignature(t *testing.T) {
 		signatureCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
 	}
 
-	assert.ProverSucceeded(&signatureCircuit, &operator.witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
+	assert.ProverSucceeded(&signatureCircuit, &operator.Witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
 }
 
 type circuitInclusionProof Circuit
@@ -110,19 +111,19 @@ func TestCircuitInclusionProof(t *testing.T) {
 	operator, users := createOperator(nbAccounts)
 
 	// read accounts involved in the transfer
-	sender, err := operator.readAccount(0)
+	sender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.readAccount(1)
+	receiver, err := operator.ReadAccount(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// create the transfer and sign it
 	amount := uint64(16)
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -148,7 +149,7 @@ func TestCircuitInclusionProof(t *testing.T) {
 
 	assert.ProverSucceeded(
 		&inclusionProofCircuit,
-		&operator.witnesses,
+		&operator.Witnesses,
 		test.WithCurves(ecc.BN254),
 		test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()),
 		test.WithBackends(backend.GROTH16))
@@ -158,7 +159,7 @@ type circuitUpdateAccount Circuit
 
 // Circuit implements part of the rollup circuit only by declaring a subset of the constraints
 func (t *circuitUpdateAccount) Define(api frontend.API) error {
-	if err := (*Circuit)(t).postInit(api); err != nil {
+	if err := (*Circuit)(t).PostInit(api); err != nil {
 		return err
 	}
 
@@ -175,19 +176,19 @@ func TestCircuitUpdateAccount(t *testing.T) {
 	operator, users := createOperator(nbAccounts)
 
 	// read accounts involved in the transfer
-	sender, err := operator.readAccount(0)
+	sender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.readAccount(1)
+	receiver, err := operator.ReadAccount(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// create the transfer and sign it
 	amount := uint64(10)
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -206,7 +207,7 @@ func TestCircuitUpdateAccount(t *testing.T) {
 	var updateAccountCircuit circuitUpdateAccount
 	(*Circuit)(&updateAccountCircuit).allocateSlicesMerkleProofs()
 
-	assert.ProverSucceeded(&updateAccountCircuit, &operator.witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
+	assert.ProverSucceeded(&updateAccountCircuit, &operator.Witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
 }
 
 func TestCircuitFull(t *testing.T) {
@@ -217,19 +218,19 @@ func TestCircuitFull(t *testing.T) {
 	operator, users := createOperator(nbAccounts)
 
 	// read accounts involved in the transfer
-	sender, err := operator.readAccount(0)
+	sender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.readAccount(1)
+	receiver, err := operator.ReadAccount(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// create the transfer and sign it
 	amount := uint64(10)
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -252,10 +253,15 @@ func TestCircuitFull(t *testing.T) {
 		rollupCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
 	}
 
+	_ = operator.Witnesses.PostInit(nil)
+	wit := operator.Witnesses
+	js, _ := json.MarshalIndent(wit, "", "  ")
+	fmt.Printf("\n\n%s\n\n", js)
+
 	// TODO full circuit has some unconstrained inputs, that's odd.
 	assert.ProverSucceeded(
 		&rollupCircuit,
-		&operator.witnesses,
+		&operator.Witnesses,
 		test.WithCurves(ecc.BN254),
 		test.WithBackends(backend.GROTH16))
 }
@@ -268,19 +274,19 @@ func TestCircuitCompile(t *testing.T) {
 	operator, users := createOperator(nbAccounts)
 
 	// read accounts involved in the transfer
-	sender, err := operator.readAccount(0)
+	sender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.readAccount(1)
+	receiver, err := operator.ReadAccount(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// create the transfer and sign it
 	amount := uint64(16)
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.nonce)
+	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -292,6 +298,11 @@ func TestCircuitCompile(t *testing.T) {
 	err = operator.updateState(transfer, 0)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	witness, err := frontend.NewWitness(operator.Witnesses, ecc.BN254.ScalarField())
+	if err != nil {
+		panic(err)
 	}
 
 	// we allocate the slices of the circuit before compiling it
@@ -311,11 +322,6 @@ func TestCircuitCompile(t *testing.T) {
 
 	// groth16 zkSNARK: Setup
 	pk, vk, err := groth16.Setup(ccs)
-	if err != nil {
-		panic(err)
-	}
-
-	witness, err := frontend.NewWitness(operator.Witnesses(), ecc.BN254.ScalarField())
 	if err != nil {
 		panic(err)
 	}

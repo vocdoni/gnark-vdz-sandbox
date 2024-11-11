@@ -29,19 +29,23 @@ var SizeAccount = 160
 
 // Voter describes a rollup account
 type Voter struct {
-	index   uint64 // index in the tree
-	nonce   uint64 // nb transactions done so far from this account
-	balance fr.Element
-	pubKey  eddsa.PublicKey
+	index      uint64 // index in the tree
+	censusRoot uint64 // nb transactions done so far from this account
+	balance    fr.Element
+	pubKey     eddsa.PublicKey
 }
 
 // Reset resets an account
 func (ac *Voter) Reset() {
 	ac.index = 0
-	ac.nonce = 0
+	ac.censusRoot = 0
 	ac.balance.SetZero()
 	ac.pubKey.A.X.SetZero()
 	ac.pubKey.A.Y.SetOne()
+}
+
+func (ac *Voter) PubKey() eddsa.PublicKey {
+	return ac.pubKey
 }
 
 // Serialize serializes the account as a concatenation of 5 chunks of 256 bits
@@ -52,8 +56,8 @@ func (ac *Voter) Serialize() []byte {
 	var res [160]byte
 
 	// first chunk of 256 bits
-	binary.BigEndian.PutUint64(res[24:], ac.index) // index is on 64 bits, so fill the last chunk of 64bits in the first 256 bits slot
-	binary.BigEndian.PutUint64(res[56:], ac.nonce) // same for nonce
+	binary.BigEndian.PutUint64(res[24:], ac.index)      // index is on 64 bits, so fill the last chunk of 64bits in the first 256 bits slot
+	binary.BigEndian.PutUint64(res[56:], ac.censusRoot) // same for nonce
 
 	// balance
 	buf := ac.balance.Bytes()
@@ -78,7 +82,7 @@ func Deserialize(res *Voter, data []byte) error {
 	}
 
 	res.index = binary.BigEndian.Uint64(data[24:32])
-	res.nonce = binary.BigEndian.Uint64(data[56:64])
+	res.censusRoot = binary.BigEndian.Uint64(data[56:64])
 	res.balance.SetBytes(data[64:96])
 	res.pubKey.A.X.SetBytes(data[96:128])
 	res.pubKey.A.Y.SetBytes(data[128:])
