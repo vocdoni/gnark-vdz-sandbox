@@ -28,6 +28,37 @@ import (
 // The tests in the package are for the rollup in plain go only, there is no snark circuits
 // involved here.
 
+type AgreggatedProofPublicInputs struct {
+	ProcessId          []byte
+	CensusRoot         []byte
+	BallotMode         []byte
+	EncryptionKey      []byte
+	Nullifiers         [][]byte
+	Commitments        [][]byte
+	Addressess         [][]byte
+	EncryptedBallots   []int
+	EncryptedBallotSum int
+}
+
+func TestOutsideZKProof(t *testing.T) {
+	// create operator with 10 voters
+	// operator, _ := createOperator(10)
+
+	// preimage := AgreggatedProofPublicInputs{
+	// 	ProcessId:          []byte{0xca, 0xfe, 0x01},
+	// 	CensusRoot:         []byte{0xca, 0xfe, 0x02},
+	// 	BallotMode:         []byte{0xca, 0xfe, 0x03},
+	// 	EncryptionKey:      []byte{0xca, 0xfe, 0x04},
+	// 	Nullifiers:         [][]byte{},
+	// 	Commitments:        [][]byte{},
+	// 	Addressess:         [][]byte{},
+	// 	EncryptedBallots:   []int{},
+	// 	EncryptedBallotSum: 0,
+	// }
+
+	// operator.updateState()
+}
+
 func TestOperatorReadAccount(t *testing.T) {
 	// create operator with 10 accounts
 	operator, _ := createOperator(10)
@@ -169,7 +200,7 @@ func createOperator(nbVoters int) (Operator, []eddsa.PrivateKey) {
 
 	operator.Witnesses.allocateSlicesMerkleProofs()
 
-	userAccounts := make([]eddsa.PrivateKey, nbVoters)
+	voterAccounts := make([]eddsa.PrivateKey, nbVoters)
 
 	// randomly fill the accounts
 	for i := 0; i < nbVoters; i++ {
@@ -181,7 +212,7 @@ func createOperator(nbVoters int) (Operator, []eddsa.PrivateKey) {
 		operator.AccountMap[string(b[:])] = acc.index
 
 		// fill user accounts list
-		userAccounts[i] = privkey
+		voterAccounts[i] = privkey
 		baccount := acc.Serialize()
 
 		copy(operator.State[SizeAccount*i:], baccount)
@@ -193,7 +224,7 @@ func createOperator(nbVoters int) (Operator, []eddsa.PrivateKey) {
 		copy(operator.HashState[operator.h.Size()*i:], buf)
 	}
 
-	return operator, userAccounts
+	return operator, voterAccounts
 }
 
 func compareAccount(t *testing.T, acc1, acc2 Voter) {

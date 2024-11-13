@@ -102,27 +102,9 @@ func (o *Operator) UpdateState(t Vote, numTransfer int) error {
 // numTransfer is the number of the transfer currently handled (between 0 and BatchSizeCircuit)
 func (o *Operator) updateState(t Vote, numTransfer int) error {
 	var posSender uint64
-	var ok bool
-
-	// ext := strconv.Itoa(numTransfer)
-	segmentSize := o.h.Size()
-
-	fmt.Println("sender", t.senderPubKey.A.X.Bytes())
-	// read sender's account
-	b := t.senderPubKey.A.X.Bytes()
-	if posSender, ok = o.AccountMap[string(b[:])]; !ok {
-		return ErrNonExistingAccount
-	}
-	senderAccount, err := o.ReadAccount(posSender)
-	if err != nil {
-		return err
-	}
-	if senderAccount.index != posSender {
-		return ErrIndexConsistency
-	}
 
 	// set witnesses for the leaves
-	o.Witnesses.LeafSender[numTransfer] = posSender
+	o.Witnesses.BallotSum[numTransfer] = posSender
 
 	// set witnesses for the public keys
 	o.Witnesses.PublicKeysSender[numTransfer].A.X = senderAccount.pubKey.A.X
@@ -130,19 +112,19 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 	fmt.Println("PublicKeysSender", o.Witnesses.PublicKeysSender[numTransfer].A.Y)
 
 	// set witnesses for the accounts before update
-	o.Witnesses.ProcessBefore[numTransfer].ProcessID = senderAccount.index
-	o.Witnesses.ProcessBefore[numTransfer].CensusRoot = senderAccount.censusRoot
-	o.Witnesses.ProcessBefore[numTransfer].BallotMode = senderAccount.balance
-	o.Witnesses.ProcessBefore[numTransfer].ResultsAdd = senderAccount.balance
-	o.Witnesses.ProcessBefore[numTransfer].ResultsSub = senderAccount.balance
+	o.Witnesses.Process[numTransfer].ProcessID = senderAccount.index
+	o.Witnesses.Process[numTransfer].CensusRoot = senderAccount.censusRoot
+	o.Witnesses.Process[numTransfer].BallotMode = senderAccount.balance
+	o.Witnesses.Process[numTransfer].ResultsAdd = senderAccount.balance
+	o.Witnesses.Process[numTransfer].ResultsSub = senderAccount.balance
 
 	//  Set witnesses for the proof of inclusion of sender and receivers account before update
 	var buf bytes.Buffer
-	_, err = buf.Write(o.HashState)
+	_, err := buf.Write(o.HashState)
 	if err != nil {
 		return err
 	}
-	merkleRootBefore, proofInclusionSenderBefore, numLeaves, err := merkletree.BuildReaderProof(&buf, o.h, segmentSize, posSender)
+	merkleRootBefore, proofInclusionSenderBefore, numLeaves, err := merkletree.BuildReaderProof(&buf, o.h, o.h.Size(), posSender)
 	if err != nil {
 		return err
 	}
@@ -150,7 +132,7 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 	// verify the proof in plain go...
 	merkletree.VerifyProof(o.h, merkleRootBefore, proofInclusionSenderBefore, posSender, numLeaves)
 
-	o.Witnesses.RootHashesBefore[numTransfer] = merkleRootBefore
+	o.Witnesses.RootHashBefore[numTransfer] = merkleRootBefore
 	o.Witnesses.MerkleProofSenderBefore[numTransfer].RootHash = merkleRootBefore
 
 	for i := 0; i < len(proofInclusionSenderBefore); i++ {
@@ -159,11 +141,11 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 	}
 
 	// set witnesses for the transfer
-	o.Witnesses.Votes[numTransfer].ChoicesAdd = t.amount
-	o.Witnesses.Votes[numTransfer].ChoicesSub = t.amount
-	o.Witnesses.Votes[numTransfer].Signature.R.X = t.signature.R.X
-	o.Witnesses.Votes[numTransfer].Signature.R.Y = t.signature.R.Y
-	o.Witnesses.Votes[numTransfer].Signature.S = t.signature.S[:]
+	o.Witnesses.Ballots[numTransfer].ChoicesAdd = t.amount
+	o.Witnesses.Ballots[numTransfer].ChoicesSub = t.amount
+	o.Witnesses.Ballots[numTransfer].Signature.R.X = t.signature.R.X
+	o.Witnesses.Ballots[numTransfer].Signature.R.Y = t.signature.R.Y
+	o.Witnesses.Ballots[numTransfer].Signature.S = t.signature.S[:]
 
 	// verifying the signature. The msg is the hash (o.h) of the transfer
 	// nonce ∥ amount ∥ senderpubKey(x&y) ∥ receiverPubkey(x&y)
@@ -179,11 +161,11 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 	dummy := senderAccount.balance
 
 	// set the witnesses for the account after update
-	o.Witnesses.ProcessAfter[numTransfer].ProcessID = senderAccount.index
-	o.Witnesses.ProcessAfter[numTransfer].CensusRoot = senderAccount.censusRoot
-	o.Witnesses.ProcessAfter[numTransfer].BallotMode = senderAccount.balance
-	o.Witnesses.ProcessAfter[numTransfer].ResultsAdd = dummy.Add(&senderAccount.balance, &t.amount)
-	o.Witnesses.ProcessAfter[numTransfer].ResultsSub = dummy.Add(&senderAccount.balance, &t.amount)
+	o.Witnesses.Process[numTransfer].ProcessID = senderAccount.index
+	o.Witnesses.Process[numTransfer].CensusRoot = senderAccount.censusRoot
+	o.Witnesses.Process[numTransfer].BallotMode = senderAccount.balance
+	o.Witnesses.Results[numTransfer].ResultsAdd = dummy.Add(&senderAccount.balance, &t.amount)
+	o.Witnesses.Results[numTransfer].ResultsSub = dummy.Add(&senderAccount.balance, &t.amount)
 
 	// update the state of the operator
 	copy(o.State[int(posSender)*SizeAccount:], senderAccount.Serialize())
@@ -198,13 +180,13 @@ func (o *Operator) updateState(t Vote, numTransfer int) error {
 	if err != nil {
 		return err
 	}
-	merkleRootAfer, proofInclusionSenderAfter, _, err := merkletree.BuildReaderProof(&buf, o.h, segmentSize, posSender)
+	merkleRootAfer, proofInclusionSenderAfter, _, err := merkletree.BuildReaderProof(&buf, o.h, o.h.Size(), posSender)
 	if err != nil {
 		return err
 	}
 	// merkleProofHelperSenderAfter := merkle.GenerateProofHelper(proofInclusionSenderAfter, posSender, numLeaves)
 
-	o.Witnesses.RootHashesAfter[numTransfer] = merkleRootAfer
+	o.Witnesses.RootHashAfter[numTransfer] = merkleRootAfer
 	o.Witnesses.MerkleProofSenderAfter[numTransfer].RootHash = merkleRootAfer
 
 	for i := 0; i < len(proofInclusionSenderAfter); i++ {

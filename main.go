@@ -31,15 +31,15 @@ func (circuit *simplerCircuit) postInit(api frontend.API) error {
 	for i := 0; i < BatchSizeCircuit; i++ {
 
 		// setting the sender accounts before update
-		circuit.ProcessBefore[i].EncryptionKey = circuit.PublicKeysSender[i]
+		circuit.Process[i].EncryptionKey = circuit.PublicKeysSender[i]
 
 		// setting the sender accounts after update
-		circuit.ProcessAfter[i].EncryptionKey = circuit.PublicKeysSender[i]
+		circuit.Results[i].EncryptionKey = circuit.PublicKeysSender[i]
 
 		// setting the transfers
-		circuit.Votes[i].Nonce = circuit.ProcessBefore[i].CensusRoot
+		circuit.Ballots[i].Nonce = circuit.Process[i].CensusRoot
 		api.Println("XXXXXXXXXXXXXXXXXXXXXX setting SenderPubKey")
-		circuit.Votes[i].SenderPubKey = circuit.PublicKeysSender[i]
+		circuit.Ballots[i].SenderPubKey = circuit.PublicKeysSender[i]
 
 		// allocate the slices for the Merkle proofs
 		// circuit.allocateSlicesMerkleProofs()
@@ -59,13 +59,13 @@ func (circuit simplerCircuit) Define(api frontend.API) error {
 		return err
 	}
 	for i := 0; i < BatchSizeCircuit; i++ {
-		api.AssertIsEqual(circuit.RootHashesBefore[i], circuit.MerkleProofSenderBefore[i].RootHash)
-		api.AssertIsEqual(circuit.RootHashesAfter[i], circuit.MerkleProofSenderAfter[i].RootHash)
+		api.AssertIsEqual(circuit.RootHashBefore[i], circuit.MerkleProofSenderBefore[i].RootHash)
+		api.AssertIsEqual(circuit.RootHashAfter[i], circuit.MerkleProofSenderAfter[i].RootHash)
 		api.Println(fmt.Printf("MerkleProofSenderBefore: %+v", circuit.MerkleProofSenderBefore[i]))
 		api.Println("OK")
 
-		circuit.MerkleProofSenderBefore[i].VerifyProof(api, &hFunc, circuit.LeafSender[i])
-		circuit.MerkleProofSenderAfter[i].VerifyProof(api, &hFunc, circuit.LeafSender[i])
+		circuit.MerkleProofSenderBefore[i].VerifyProof(api, &hFunc, circuit.BallotSum[i])
+		circuit.MerkleProofSenderAfter[i].VerifyProof(api, &hFunc, circuit.BallotSum[i])
 		hFunc.Write(big.NewInt(int64(1)))
 		api.Println(hFunc.Sum())
 	}
@@ -169,7 +169,7 @@ func createOperator(nbVoters int) (rollup.Operator, []eddsa.PrivateKey) {
 
 func main() {
 	// compiles our circuit into a R1CS
-	var circuit simplerCircuit
+	var circuit rollup.Circuit
 	for i := 0; i < BatchSizeCircuit; i++ {
 		// allocating slice for the Merkle paths
 		circuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
@@ -213,10 +213,19 @@ func main() {
 	}
 
 	fmt.Printf("%+v", op.Witnesses)
-	debugCircuit := rollup.DebugCircuit{}
-	debugCircuit.RootHashesBefore[0] = []byte{0x00}
-	debugCircuit.RootHashesAfter[0] = []byte{0x00}
-	debugCircuit.LeafSender[0] = []byte{0x00}
+	debugCircuit := rollup.Circuit{}
+	debugCircuit.RootHashBefore[0] = []byte{0x00}
+	debugCircuit.RootHashAfter[0] = []byte{0x00}
+	debugCircuit.BallotSum[0] = []byte{0x00}
+	debugCircuit.Process[0] = rollup.ProcessConstraints{
+		ProcessID:  p,
+		CensusRoot: []byte{0x00},
+		BallotMode: []byte{0x00},
+		// EncryptionKey: eddsa.PublicKey{},
+		ResultsAdd: []byte{0x00},
+		ResultsSub: []byte{0x00},
+	}
+	debugCircuit.Results[0] = rollup.ProcessConstraints{}
 
 	for i := 0; i < BatchSizeCircuit; i++ {
 		// allocating slice for the Merkle paths

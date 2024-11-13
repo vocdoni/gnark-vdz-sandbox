@@ -42,7 +42,7 @@ func (t *circuitSignature) Define(api frontend.API) error {
 	if err != nil {
 		return err
 	}
-	return verifyVoteSignature(api, t.Votes[0], hFunc)
+	return verifyVoteSignature(api, t.Ballots[0], hFunc)
 }
 
 func TestCircuitSignature(t *testing.T) {
@@ -97,8 +97,8 @@ func (t *circuitInclusionProof) Define(api frontend.API) error {
 		return err
 	}
 
-	t.MerkleProofSenderBefore[0].VerifyProof(api, &hashFunc, t.LeafSender[0])
-	t.MerkleProofSenderAfter[0].VerifyProof(api, &hashFunc, t.LeafSender[0])
+	t.MerkleProofSenderBefore[0].VerifyProof(api, &hashFunc, t.BallotSum[0])
+	t.MerkleProofSenderAfter[0].VerifyProof(api, &hashFunc, t.BallotSum[0])
 
 	return nil
 }
@@ -163,8 +163,8 @@ func (t *circuitUpdateAccount) Define(api frontend.API) error {
 		return err
 	}
 
-	verifyProcessUpdate(api, t.ProcessBefore[0], t.ProcessAfter[0],
-		t.Votes[0].ChoicesAdd, t.Votes[0].ChoicesSub)
+	verifyResults(api, t.Process[0], t.Results[0],
+		t.Ballots[0].ChoicesAdd, t.Ballots[0].ChoicesSub)
 	return nil
 }
 
