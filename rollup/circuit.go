@@ -138,6 +138,8 @@ func (circuit Circuit) Define(api frontend.API) error {
 			circuit.MerkleProofs[i])
 		verifyResults(api, circuit.BallotSum[i],
 			circuit.MerkleProofs[i].ResultsAdd.Leaf, circuit.MerkleProofs[i].ResultsAdd.NewLeaf,
+		)
+		verifyOverwrites(api, circuit.Ballots[i].Ballots,
 			circuit.MerkleProofs[i].ResultsSub.Leaf, circuit.MerkleProofs[i].ResultsSub.NewLeaf,
 		)
 		verifyStats(api)
@@ -181,23 +183,29 @@ func verifyMerkleProof(api frontend.API, hFunc hash.FieldHasher, root frontend.V
 	mp.VerifyProof(api, hFunc)
 }
 
-// verifyMerkleTransition checks that:
-//   - mpBefore matches root
-//   - mpBefore and mpAfter have equal paths (indicating rest of the tree is untouched)
-//   - mpBefore and mpAfter are valid proofs
+// verifyMerkleTransition asserts a MerkleProofPair is valid
+//   - mp.RootHash matches passed root
+//   - mp.Leaf belongs to mp.RootHash
+//   - mp.NewLeaf belongs to mp.NewRootHash
+//
+// and returns mp.NewRootHash
 func verifyMerkleTransition(api frontend.API, hFunc hash.FieldHasher, root frontend.Variable, mp MerkleProofPair) frontend.Variable {
 	api.AssertIsEqual(root, mp.RootHash)
 	mp.VerifyProofPair(api, hFunc)
 	return mp.NewRootHash
 }
 
-func verifyResults(api frontend.API, sum,
-	resultsAddBefore, resultsAddAfter,
-	resultsSubBefore, resultsSubAfter frontend.Variable,
+func verifyResults(api frontend.API, sum, resultsAddBefore, resultsAddAfter frontend.Variable,
 ) {
-	// TODO: mock, sum should certainly not be added to both resultsAdd and resultsSub
+	// TODO: mock, sum should be elGamal arithmetic
 	api.AssertIsEqual(api.Add(resultsAddBefore, sum), resultsAddAfter)
-	api.AssertIsEqual(api.Add(resultsSubBefore, sum), resultsSubAfter)
+}
+
+// verifyOverwrites is not planned for PoC v1.0
+func verifyOverwrites(api frontend.API, ballots, resultsSubBefore, resultsSubAfter frontend.Variable,
+) {
+	// TODO: mock, sum should be elGamal arithmetic
+	api.AssertIsEqual(api.Add(resultsSubBefore, ballots), resultsSubAfter)
 }
 
 func verifyStats(api frontend.API) {
