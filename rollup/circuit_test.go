@@ -38,8 +38,9 @@ func (t *circuitUpdateAccount) Define(api frontend.API) error {
 		return err
 	}
 
-	verifyResults(api, t.Process[0], t.Results[0],
-		t.Ballots[0].Ballots, t.Ballots[0].Ballots, t.Ballots[0].Ballots)
+	verifyResults(api, t.BallotSum,
+		t.MerkleProofs.ResultsAdd.Leaf, t.MerkleProofs.ResultsAdd.NewLeaf,
+	)
 	return nil
 }
 
@@ -72,7 +73,7 @@ func TestCircuitUpdateAccount(t *testing.T) {
 	}
 
 	// update the state from the received transfer
-	err = operator.updateState(transfer, 0)
+	err = operator.updateState(transfer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +115,7 @@ func TestCircuitFull(t *testing.T) {
 	}
 
 	// update the state from the received transfer
-	err = operator.updateState(transfer, 0)
+	err = operator.updateState(transfer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,10 +124,7 @@ func TestCircuitFull(t *testing.T) {
 	// verifies the proofs of inclusion of the transfer
 
 	var rollupCircuit Circuit
-	for i := 0; i < BatchSizeCircuit; i++ {
-		// rollupCircuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
-		// rollupCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
-	}
+	rollupCircuit.allocateSlicesMerkleProofs()
 
 	_ = operator.Witnesses.PostInit(nil)
 	wit := operator.Witnesses
@@ -170,7 +168,7 @@ func TestCircuitCompile(t *testing.T) {
 	}
 
 	// update the state from the received transfer
-	err = operator.updateState(transfer, 0)
+	err = operator.updateState(transfer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,10 +180,7 @@ func TestCircuitCompile(t *testing.T) {
 
 	// we allocate the slices of the circuit before compiling it
 	var inclusionProofCircuit Circuit
-	for i := 0; i < BatchSizeCircuit; i++ {
-		// inclusionProofCircuit.MerkleProofSenderBefore[i].Path = make([]frontend.Variable, depth)
-		// inclusionProofCircuit.MerkleProofSenderAfter[i].Path = make([]frontend.Variable, depth)
-	}
+	inclusionProofCircuit.allocateSlicesMerkleProofs()
 	p := profile.Start()
 
 	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &inclusionProofCircuit)

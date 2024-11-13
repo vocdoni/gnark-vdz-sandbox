@@ -142,7 +142,7 @@ func TestOperatorUpdateAccount(t *testing.T) {
 	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
 	transfer.Sign(userKeys[0], operator.h)
 
-	err = operator.updateState(transfer, 0)
+	err = operator.updateState(transfer)
 	if err != nil {
 		t.Fatal(err)
 	}

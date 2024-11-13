@@ -24,10 +24,9 @@ import (
 )
 
 const (
-	nbAccounts       = 16 // 16 accounts so we know that the proof length is 5
-	depth            = 5  // size fo the inclusion proofs
-	BatchSizeCircuit = 1  // nbTransitions to batch in a proof
-	VoteBatchSize    = 10 // nbVotes that were processed in AggregatedProof
+	nbAccounts    = 16 // 16 accounts so we know that the proof length is 5
+	depth         = 5  // size fo the inclusion proofs
+	VoteBatchSize = 10 // nbVotes that were processed in AggregatedProof
 )
 
 // Circuit "toy" rollup circuit where an operator can generate a proof that he processed
@@ -37,25 +36,25 @@ type Circuit struct {
 	// PUBLIC INPUTS
 
 	// list of root hashes
-	RootHashBefore [BatchSizeCircuit]frontend.Variable `gnark:",public"`
-	RootHashAfter  [BatchSizeCircuit]frontend.Variable `gnark:",public"`
-	NumVotes       [BatchSizeCircuit]frontend.Variable `gnark:",public"`
-	NumOverwrites  [BatchSizeCircuit]frontend.Variable `gnark:",public"`
+	RootHashBefore frontend.Variable `gnark:",public"`
+	RootHashAfter  frontend.Variable `gnark:",public"`
+	NumVotes       frontend.Variable `gnark:",public"`
+	NumOverwrites  frontend.Variable `gnark:",public"`
 
 	// ---------------------------------------------------------------------------------------------
 	// SECRET INPUTS
 
-	AggregatedProof [BatchSizeCircuit]frontend.Variable // mock, this should be a zkProof
+	AggregatedProof frontend.Variable // mock, this should be a zkProof
 	// list of proofs corresponding to each tree modification
-	MerkleProofs [BatchSizeCircuit]MerkleProofs
+	MerkleProofs MerkleProofs
 
 	// the following inputs will be used inside the circuit for some checks,
 	// but also hashed to produce the public input needed to verify AggregatedProof
 	// TODO: Actually all of these are also on the Leaf's inside MerkleProofs, dedup?
-	Process   [BatchSizeCircuit]ProcessConstraints
-	Results   [BatchSizeCircuit]ResultsConstraints
-	Ballots   [BatchSizeCircuit]BallotsConstraints
-	BallotSum [BatchSizeCircuit]frontend.Variable
+	Process   ProcessConstraints
+	Results   ResultsConstraints
+	Ballots   BallotsConstraints
+	BallotSum frontend.Variable
 }
 
 // ProcessConstraints represents the process encoded as constraints
@@ -95,27 +94,23 @@ type MerkleProofs struct {
 }
 
 func (circuit *Circuit) PostInit(api frontend.API) error {
-	for i := 0; i < BatchSizeCircuit; i++ {
-		// allocate the slices for the Merkle proofs
-		// circuit.allocateSlicesMerkleProofs()
-	}
+	// allocate the slices for the Merkle proofs
+	// circuit.allocateSlicesMerkleProofs()
 	return nil
 }
 
 func (circuit *Circuit) allocateSlicesMerkleProofs() {
-	for i := range BatchSizeCircuit {
-		circuit.MerkleProofs[i].ProcessID.Path = make([]frontend.Variable, depth)
-		circuit.MerkleProofs[i].CensusRoot.Path = make([]frontend.Variable, depth)
-		circuit.MerkleProofs[i].BallotMode.Path = make([]frontend.Variable, depth)
-		circuit.MerkleProofs[i].EncryptionKey.Path = make([]frontend.Variable, depth)
-		circuit.MerkleProofs[i].ResultsAdd.Path = make([]frontend.Variable, depth)
-		circuit.MerkleProofs[i].ResultsSub.Path = make([]frontend.Variable, depth)
-		for j := range VoteBatchSize {
-			circuit.MerkleProofs[i].Address[j].Path = make([]frontend.Variable, depth)
-			circuit.MerkleProofs[i].Nullifier[j].Path = make([]frontend.Variable, depth)
-			circuit.MerkleProofs[i].Commitment[j].Path = make([]frontend.Variable, depth)
-			circuit.MerkleProofs[i].Ballot[j].Path = make([]frontend.Variable, depth)
-		}
+	circuit.MerkleProofs.ProcessID.Path = make([]frontend.Variable, depth)
+	circuit.MerkleProofs.CensusRoot.Path = make([]frontend.Variable, depth)
+	circuit.MerkleProofs.BallotMode.Path = make([]frontend.Variable, depth)
+	circuit.MerkleProofs.EncryptionKey.Path = make([]frontend.Variable, depth)
+	circuit.MerkleProofs.ResultsAdd.Path = make([]frontend.Variable, depth)
+	circuit.MerkleProofs.ResultsSub.Path = make([]frontend.Variable, depth)
+	for j := range VoteBatchSize {
+		circuit.MerkleProofs.Address[j].Path = make([]frontend.Variable, depth)
+		circuit.MerkleProofs.Nullifier[j].Path = make([]frontend.Variable, depth)
+		circuit.MerkleProofs.Commitment[j].Path = make([]frontend.Variable, depth)
+		circuit.MerkleProofs.Ballot[j].Path = make([]frontend.Variable, depth)
 	}
 }
 
@@ -130,20 +125,18 @@ func (circuit Circuit) Define(api frontend.API) error {
 		return err
 	}
 
-	for i := range BatchSizeCircuit {
-		verifyAggregatedZKProof(api)
-		verifyMerkleProofs(api, &hFunc,
-			circuit.RootHashBefore[i],
-			circuit.RootHashAfter[i],
-			circuit.MerkleProofs[i])
-		verifyResults(api, circuit.BallotSum[i],
-			circuit.MerkleProofs[i].ResultsAdd.Leaf, circuit.MerkleProofs[i].ResultsAdd.NewLeaf,
-		)
-		verifyOverwrites(api, circuit.Ballots[i].Ballots,
-			circuit.MerkleProofs[i].ResultsSub.Leaf, circuit.MerkleProofs[i].ResultsSub.NewLeaf,
-		)
-		verifyStats(api)
-	}
+	verifyAggregatedZKProof(api)
+	verifyMerkleProofs(api, &hFunc,
+		circuit.RootHashBefore,
+		circuit.RootHashAfter,
+		circuit.MerkleProofs)
+	verifyResults(api, circuit.BallotSum,
+		circuit.MerkleProofs.ResultsAdd.Leaf, circuit.MerkleProofs.ResultsAdd.NewLeaf,
+	)
+	verifyOverwrites(api, circuit.Ballots.Ballots,
+		circuit.MerkleProofs.ResultsSub.Leaf, circuit.MerkleProofs.ResultsSub.NewLeaf,
+	)
+	verifyStats(api)
 
 	return nil
 }
