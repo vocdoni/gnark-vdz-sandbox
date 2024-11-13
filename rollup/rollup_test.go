@@ -87,14 +87,9 @@ func TestSignTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.ReadAccount(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// create the transfer and sign it (the hash used for signing is the hash function of the operator)
 	amount = 10
-	vote := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
+	vote := NewVote(amount, sender.pubKey)
 
 	// verify correct signature
 	_, err = vote.Sign(userKeys[0], operator.h)
@@ -139,7 +134,7 @@ func TestOperatorUpdateAccount(t *testing.T) {
 
 	// create the transfer and sign it
 	amount = 10
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
+	transfer := NewVote(amount, sender.pubKey)
 	transfer.Sign(userKeys[0], operator.h)
 
 	err = operator.updateState(transfer)

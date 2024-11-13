@@ -20,7 +20,6 @@ import (
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/std/hash"
 	"github.com/consensys/gnark/std/hash/mimc"
-	"github.com/consensys/gnark/std/signature/eddsa"
 )
 
 const (
@@ -48,35 +47,19 @@ type Circuit struct {
 	// list of proofs corresponding to each tree modification
 	MerkleProofs MerkleProofs
 
-	// the following inputs will be used inside the circuit for some checks,
-	// but also hashed to produce the public input needed to verify AggregatedProof
-	// TODO: Actually all of these are also on the Leaf's inside MerkleProofs, dedup?
-	Process   ProcessConstraints
-	Results   ResultsConstraints
-	Ballots   BallotsConstraints
+	// all of these values compose the preimage that is hashed
+	// to produce the public input needed to verify AggregatedProof.
+	// they are extracted from the MerkleProofs,
+	// except BallotSum, so we declare it as a frontend.Variable
+	// ProcessID     frontend.Variable --> MerkleProofs.ProcessID.Leaf
+	// CensusRoot    frontend.Variable --> MerkleProofs.CensusRoot.Leaf
+	// BallotMode    frontend.Variable --> MerkleProofs.BallotMode.Leaf
+	// EncryptionKey eddsa.PublicKey `gnark:"-"` --> MerkleProofs.EncryptionKey.Leaf
+	// Nullifiers    [VoteBatchSize]frontend.Variable --> MerkleProofs.Nullifier[i].Leaf
+	// Commitments   [VoteBatchSize]frontend.Variable --> MerkleProofs.Commitment[i].Leaf
+	// Addressess    [VoteBatchSize]frontend.Variable --> MerkleProofs.Addresse[i].Leaf
+	// Ballots       [VoteBatchSize]frontend.Variable --> MerkleProofs.Ballot[i].Leaf
 	BallotSum frontend.Variable
-}
-
-// ProcessConstraints represents the process encoded as constraints
-type ProcessConstraints struct {
-	ProcessID     frontend.Variable
-	CensusRoot    frontend.Variable
-	BallotMode    frontend.Variable
-	EncryptionKey eddsa.PublicKey `gnark:"-"`
-}
-
-// ResultsConstraints represents the process results, encoded as constraints
-type ResultsConstraints struct {
-	ResultsAdd frontend.Variable
-	ResultsSub frontend.Variable
-}
-
-// BallotsConstraints represents the ballots, encoded as constraints
-type BallotsConstraints struct {
-	Nullifiers  [VoteBatchSize]frontend.Variable
-	Commitments [VoteBatchSize]frontend.Variable
-	Addressess  [VoteBatchSize]frontend.Variable
-	Ballots     [VoteBatchSize]frontend.Variable
 }
 
 // MerkleProofs contains the SMT Witness
@@ -133,7 +116,7 @@ func (circuit Circuit) Define(api frontend.API) error {
 	verifyResults(api, circuit.BallotSum,
 		circuit.MerkleProofs.ResultsAdd.Leaf, circuit.MerkleProofs.ResultsAdd.NewLeaf,
 	)
-	verifyOverwrites(api, circuit.Ballots.Ballots,
+	verifyOverwrites(api, circuit.MerkleProofs.Ballot,
 		circuit.MerkleProofs.ResultsSub.Leaf, circuit.MerkleProofs.ResultsSub.NewLeaf,
 	)
 	verifyStats(api)

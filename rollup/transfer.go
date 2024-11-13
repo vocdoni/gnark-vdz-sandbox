@@ -32,10 +32,9 @@ type Vote struct {
 }
 
 // NewVote creates a new transfer (to be signed)
-func NewVote(amount uint64, from, _ eddsa.PublicKey, nonce uint64) Vote {
+func NewVote(amount uint64, from eddsa.PublicKey) Vote {
 	var res Vote
 
-	res.nonce = nonce
 	res.amount.SetUint64(amount)
 	res.senderPubKey = from
 

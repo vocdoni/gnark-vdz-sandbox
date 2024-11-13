@@ -4,6 +4,7 @@ import (
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/std/accumulator/merkle"
 	"github.com/consensys/gnark/std/hash"
+	"go.vocdoni.io/dvote/tree/arbo"
 )
 
 // MerkleProof stores the leaf, the path, and the root hash.
@@ -19,6 +20,29 @@ type MerkleProofPair struct {
 	// NewLeaf hashed through the same Path should produce NewRootHash
 	NewRootHash frontend.Variable
 	NewLeaf     frontend.Variable
+}
+
+func (o *Operator) GenMerkleProofFromArbo(k []byte) (MerkleProof, error) {
+	root, err := o.ArboState.Root()
+	if err != nil {
+		return MerkleProof{}, err
+	}
+	leafK, leafV, siblings, fnc, err := o.ArboState.GenProof(k)
+	if err != nil {
+		return MerkleProof{}, err
+	}
+	return NewMerkleProofFromArbo(root, leafK, leafV, siblings, fnc), nil
+}
+
+func NewMerkleProofFromArbo(root, leafK, leafV, packedSiblings []byte, fnc bool) MerkleProof {
+	return MerkleProof{
+		MerkleProof: merkle.MerkleProof{
+			RootHash: arbo.BytesToBigInt(root),
+			Path:     []frontend.Variable{packedSiblings}, // TODO: mock, this should unpack siblings
+		},
+		Leaf: arbo.BytesToBigInt(leafK), // TODO: mock, this should be leafK=leafV
+	}
+	// TODO: support fnc
 }
 
 // VerifyProof takes a Merkle root, a proofSet, and a proofIndex and returns

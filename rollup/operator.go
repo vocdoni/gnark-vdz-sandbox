@@ -22,6 +22,8 @@ import (
 
 	"github.com/consensys/gnark-crypto/accumulator/merkletree"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
+	"go.vocdoni.io/dvote/db"
+	"go.vocdoni.io/dvote/tree/arbo"
 )
 
 var hFunc = mimc.NewMiMC()
@@ -52,6 +54,7 @@ type Operator struct {
 	q          Queue             // queue of transfers
 	batch      int               // current number of transactions in a batch
 	Witnesses  Circuit           // witnesses for the snark circuit
+	ArboState  *arbo.Tree
 }
 
 // NewOperator creates a new operator.
@@ -97,13 +100,82 @@ func (o *Operator) UpdateState(t Vote) error {
 	return o.updateState(t)
 }
 
+func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, encryptionKey []byte) error {
+	tree, err := arbo.NewTree(arbo.Config{
+		Database: db, MaxLevels: 4,
+		HashFunction: arbo.HashFunctionPoseidon,
+	})
+	if err != nil {
+		return err
+	}
+	o.ArboState = tree
+	if err := o.ArboState.Add([]byte{0x00}, processID); err != nil {
+		return err
+	}
+	if err := o.ArboState.Add([]byte{0x01}, censusRoot); err != nil {
+		return err
+	}
+	if err := o.ArboState.Add([]byte{0x02}, ballotMode); err != nil {
+		return err
+	}
+	if err := o.ArboState.Add([]byte{0x03}, encryptionKey); err != nil {
+		return err
+	}
+
+	// mock, to avoid nulls
+	o.Witnesses.NumVotes = 0
+	o.Witnesses.NumOverwrites = 0
+	o.Witnesses.AggregatedProof = 0
+	o.Witnesses.BallotSum = 0
+	o.mockProofs()
+
+	if o.Witnesses.MerkleProofs.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
+		return err
+	}
+	if o.Witnesses.MerkleProofs.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
+		return err
+	}
+	if o.Witnesses.MerkleProofs.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
+		return err
+	}
+	if o.Witnesses.MerkleProofs.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (o *Operator) mockProofs() error {
+	mockProof, err := o.GenMerkleProofFromArbo([]byte{0xff})
+	if err != nil {
+		return err
+	}
+	mockProofPair := MerkleProofPair{
+		MerkleProof: mockProof,
+		NewRootHash: []byte{0x00},
+		NewLeaf:     []byte{0xff},
+	}
+	o.Witnesses.MerkleProofs.ResultsAdd = mockProofPair
+	o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
+	for i := range o.Witnesses.MerkleProofs.Address {
+		o.Witnesses.MerkleProofs.Address[i] = mockProofPair
+	}
+	for i := range o.Witnesses.MerkleProofs.Ballot {
+		o.Witnesses.MerkleProofs.Ballot[i] = mockProofPair
+	}
+	for i := range o.Witnesses.MerkleProofs.Commitment {
+		o.Witnesses.MerkleProofs.Commitment[i] = mockProofPair
+	}
+	for i := range o.Witnesses.MerkleProofs.Nullifier {
+		o.Witnesses.MerkleProofs.Nullifier[i] = mockProofPair
+	}
+	return nil
+}
+
 // updateState updates the state according to transfer
 // numTransfer is the number of the transfer currently handled (between 0 and BatchSizeCircuit)
 func (o *Operator) updateState(t Vote) error {
-	var posSender uint64
-
 	// set witnesses for the leaves
-	o.Witnesses.BallotSum = posSender
 
 	// set witnesses for the public keys
 	// o.Witnesses.PublicKeysSender.A.X = senderAccount.pubKey.A.X
@@ -123,15 +195,15 @@ func (o *Operator) updateState(t Vote) error {
 	if err != nil {
 		return err
 	}
-	merkleRootBefore, proofInclusionSenderBefore, numLeaves, err := merkletree.BuildReaderProof(&buf, o.h, o.h.Size(), posSender)
+	merkleRootBefore, proofInclusionSenderBefore, numLeaves, err := merkletree.BuildReaderProof(&buf, o.h, o.h.Size(), 0)
 	if err != nil {
 		return err
 	}
 
 	// verify the proof in plain go...
-	merkletree.VerifyProof(o.h, merkleRootBefore, proofInclusionSenderBefore, posSender, numLeaves)
+	merkletree.VerifyProof(o.h, merkleRootBefore, proofInclusionSenderBefore, 0, numLeaves)
 
-	// o.Witnesses.RootHashBefore = merkleRootBefore
+	o.Witnesses.RootHashBefore = merkleRootBefore
 	// o.Witnesses.MerkleProofSenderBefore.RootHash = merkleRootBefore
 
 	// for i := 0; i < len(proofInclusionSenderBefore); i++ {
@@ -179,7 +251,7 @@ func (o *Operator) updateState(t Vote) error {
 	if err != nil {
 		return err
 	}
-	merkleRootAfer, proofInclusionSenderAfter, _, err := merkletree.BuildReaderProof(&buf, o.h, o.h.Size(), posSender)
+	merkleRootAfer, proofInclusionSenderAfter, _, err := merkletree.BuildReaderProof(&buf, o.h, o.h.Size(), 0)
 	if err != nil {
 		return err
 	}

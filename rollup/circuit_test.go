@@ -28,6 +28,7 @@ import (
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/profile"
 	"github.com/consensys/gnark/test"
+	"go.vocdoni.io/dvote/db/metadb"
 )
 
 type circuitUpdateAccount Circuit
@@ -57,14 +58,9 @@ func TestCircuitUpdateAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.ReadAccount(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// create the transfer and sign it
 	amount := uint64(10)
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
+	transfer := NewVote(amount, sender.pubKey)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -93,20 +89,24 @@ func TestCircuitFull(t *testing.T) {
 
 	operator, users := createOperator(nbAccounts)
 
+	if err := operator.initState(metadb.NewTest(t),
+		[]byte{0xca, 0xfe, 0x00},
+		[]byte{0xca, 0xfe, 0x01},
+		[]byte{0xca, 0xfe, 0x02},
+		[]byte{0xca, 0xfe, 0x03},
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	// read accounts involved in the transfer
 	sender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.ReadAccount(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// create the transfer and sign it
 	amount := uint64(10)
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
+	transfer := NewVote(amount, sender.pubKey)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
@@ -152,14 +152,9 @@ func TestCircuitCompile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.ReadAccount(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// create the transfer and sign it
 	amount := uint64(16)
-	transfer := NewVote(amount, sender.pubKey, receiver.pubKey, sender.censusRoot)
+	transfer := NewVote(amount, sender.pubKey)
 
 	// sign the transfer
 	_, err = transfer.Sign(users[0], operator.h)
