@@ -125,8 +125,7 @@ func (circuit Circuit) Define(api frontend.API) error {
 }
 
 func verifyAggregatedZKProof(api frontend.API) {
-	api.AssertIsBoolean(true) // TODO: mock, should actually verify Aggregated ZKProof
-	return
+	api.AssertIsEqual(1, 1) // TODO: mock, should actually verify Aggregated ZKProof
 }
 
 func verifyMerkleProofs(api frontend.API, hFunc hash.FieldHasher, rootBefore, rootAfter frontend.Variable, mps MerkleProofs) {

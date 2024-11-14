@@ -38,11 +38,19 @@ func NewMerkleProofFromArbo(root, leafK, leafV, packedSiblings []byte, fnc bool)
 	return MerkleProof{
 		MerkleProof: merkle.MerkleProof{
 			RootHash: arbo.BytesToBigInt(root),
-			Path:     []frontend.Variable{packedSiblings}, // TODO: mock, this should unpack siblings
+			Path:     emptyPath(depth), // TODO: mock, this should unpack siblings
 		},
 		Leaf: arbo.BytesToBigInt(leafK), // TODO: mock, this should be leafK=leafV
 	}
 	// TODO: support fnc
+}
+
+func emptyPath(n int) []frontend.Variable {
+	path := make([]frontend.Variable, n)
+	for i := range path {
+		path[i] = []byte{}
+	}
+	return path
 }
 
 // VerifyProof takes a Merkle root, a proofSet, and a proofIndex and returns

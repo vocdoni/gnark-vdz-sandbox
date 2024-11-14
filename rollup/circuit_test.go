@@ -52,6 +52,15 @@ func TestCircuitUpdateAccount(t *testing.T) {
 
 	operator, users := createOperator(nbAccounts)
 
+	if err := operator.initState(metadb.NewTest(t),
+		[]byte{0xca, 0xfe, 0x00},
+		[]byte{0xca, 0xfe, 0x01},
+		[]byte{0xca, 0xfe, 0x02},
+		[]byte{0xca, 0xfe, 0x03},
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	// read accounts involved in the transfer
 	sender, err := operator.ReadAccount(0)
 	if err != nil {
