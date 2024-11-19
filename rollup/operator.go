@@ -164,6 +164,7 @@ func (o *Operator) mockProofs() error {
 		OldRoot:  mockProof.Root,
 		OldKey:   mockProof.Key,
 		OldValue: mockProof.Value,
+		OldFnc:   mockProof.Fnc,
 	}
 	o.Witnesses.MerkleProofs.ResultsAdd = mockProofPair
 	// o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
@@ -274,9 +275,8 @@ func (o *Operator) updateState(t Vote) error {
 		o.Witnesses.MerkleProofs.ResultsAdd.OldRoot = arbo.BytesLEToBigInt(root)
 		fmt.Printf("%+v\n", o.Witnesses.MerkleProofs.ResultsAdd)
 
-		if mpBefore.Fnc == 1 && mpAfter.Fnc == 0 {
-			o.Witnesses.MerkleProofs.ResultsAdd.Fnc = 1
-		}
+		o.Witnesses.MerkleProofs.ResultsAdd.OldFnc = mpBefore.Fnc
+
 	}
 	// // add key 5
 	// {

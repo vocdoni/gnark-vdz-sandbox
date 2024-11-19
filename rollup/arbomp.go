@@ -32,10 +32,11 @@ type MerkleProofPair struct {
 
 	IsOld0 frontend.Variable
 	Fnc    frontend.Variable // 0: inclusion, 1: non inclusion
-	// NewKey+NewValue hashed through same Siblings should produce OldRoot hash
+	// OldKey+OldValue hashed through same Siblings should produce OldRoot hash
 	OldRoot  frontend.Variable
 	OldKey   frontend.Variable
 	OldValue frontend.Variable
+	OldFnc   frontend.Variable
 }
 
 // GenMerkleProofPairFromArbo generates a MerkleProof for a given key
@@ -72,6 +73,7 @@ func (o *Operator) GenMerkleProofPairFromArbo(k []byte) (MerkleProofPair, error)
 	}
 
 	cp.IsOld0 = 0
+	cp.OldFnc = 0
 
 	return cp, nil
 }
@@ -148,8 +150,14 @@ func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h arboHash) {
 	garbo.CheckProof(api, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
 	api.Println("x", mp.Key)
 
-	if mp.Fnc == 1 {
+	if mp.OldFnc == 1 && mp.Fnc == 0 {
 		api.Println("pair of proofs is adding a leaf, should first check exclusion and then inclusion")
+	}
+	if mp.OldFnc == 0 && mp.Fnc == 0 {
+		api.Println("pair of proofs is updating a leaf, should check both inclusions")
+	}
+	if mp.OldFnc == 0 && mp.Fnc == 1 {
+		api.Println("pair of proofs is removing a leaf, should check inclusion and then exclusion")
 	}
 	// TODO, can't use `if` in gnark
 
@@ -157,10 +165,10 @@ func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h arboHash) {
 		mp.Root,
 		mp.OldKey,
 		mp.OldValue,
-		0,
+		mp.IsOld0,
 		mp.Key,
 		mp.Value,
-		0,
+		mp.Fnc,
 		mp.Siblings[:])
 
 	// } else {
