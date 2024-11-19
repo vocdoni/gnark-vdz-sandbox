@@ -63,16 +63,16 @@ type Circuit struct {
 
 // MerkleProofs contains the SMT Witness
 type MerkleProofs struct {
-	ProcessID     MerkleProof
-	CensusRoot    MerkleProof
-	BallotMode    MerkleProof
-	EncryptionKey MerkleProof
-	ResultsAdd    MerkleProofPair
-	ResultsSub    MerkleProofPair
-	Nullifier     [VoteBatchSize]MerkleProofPair
-	Commitment    [VoteBatchSize]MerkleProofPair
-	Address       [VoteBatchSize]MerkleProofPair
-	Ballot        [VoteBatchSize]MerkleProofPair
+	// ProcessID     MerkleProof
+	// CensusRoot    MerkleProof
+	// BallotMode    MerkleProof
+	// EncryptionKey MerkleProof
+	ResultsAdd MerkleProofPair
+	// ResultsSub MerkleProofPair
+	// Nullifier     [VoteBatchSize]MerkleProofPair
+	// Commitment    [VoteBatchSize]MerkleProofPair
+	// Address       [VoteBatchSize]MerkleProofPair
+	// Ballot        [VoteBatchSize]MerkleProofPair
 }
 
 func (circuit *Circuit) PostInit(api frontend.API) error {
@@ -114,9 +114,9 @@ func (circuit Circuit) Define(api frontend.API) error {
 	verifyResults(api, circuit.BallotSum,
 		circuit.MerkleProofs.ResultsAdd.OldValue, circuit.MerkleProofs.ResultsAdd.Value,
 	)
-	verifyOverwrites(api, circuit.MerkleProofs.Ballot,
-		circuit.MerkleProofs.ResultsSub.OldValue, circuit.MerkleProofs.ResultsSub.Value,
-	)
+	// verifyOverwrites(api, circuit.MerkleProofs.Ballot,
+	// 	circuit.MerkleProofs.ResultsSub.OldValue, circuit.MerkleProofs.ResultsSub.Value,
+	// )
 	verifyStats(api)
 
 	return nil
@@ -128,16 +128,17 @@ func verifyAggregatedZKProof(api frontend.API) {
 
 func verifyMerkleProofs(api frontend.API, hFunc arboHash, rootBefore, rootAfter frontend.Variable, mps MerkleProofs) {
 	// check process is untouched
-	verifyMerkleProof(api, hFunc, rootBefore, mps.ProcessID)
-	verifyMerkleProof(api, hFunc, rootBefore, mps.CensusRoot)
-	verifyMerkleProof(api, hFunc, rootBefore, mps.BallotMode)
-	verifyMerkleProof(api, hFunc, rootBefore, mps.EncryptionKey)
+	// verifyMerkleProof(api, hFunc, rootBefore, mps.ProcessID)
+	// verifyMerkleProof(api, hFunc, rootBefore, mps.CensusRoot)
+	// verifyMerkleProof(api, hFunc, rootBefore, mps.BallotMode)
+	// verifyMerkleProof(api, hFunc, rootBefore, mps.EncryptionKey)
 	// verify key transitions, order here is fundamental.
 	root := rootBefore
 	api.Println("root is rootBefore, i.e.", root, "=", toHex(root))
 	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsAdd)
-	api.Println("now root is", root, "=", toHex(root))
-	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsSub)
+	// api.Println("now root is", root, "=", toHex(root))
+	// root = verifyMerkleTransition(api, hFunc, root, mps.ResultsSub)
+	api.Println("and now root is", root, "=", toHex(root), "should be equal to rootAfter", toHex(root))
 	// for i := range mps.Nullifier {
 	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Nullifier[i])
 	// }

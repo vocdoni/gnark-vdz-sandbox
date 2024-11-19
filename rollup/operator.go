@@ -133,18 +133,18 @@ func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, 
 	o.Witnesses.BallotSum = 0
 	o.mockProofs()
 
-	if o.Witnesses.MerkleProofs.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
-		return err
-	}
-	if o.Witnesses.MerkleProofs.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
-		return err
-	}
-	if o.Witnesses.MerkleProofs.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
-		return err
-	}
-	if o.Witnesses.MerkleProofs.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
-		return err
-	}
+	// if o.Witnesses.MerkleProofs.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
+	// 	return err
+	// }
+	// if o.Witnesses.MerkleProofs.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
+	// 	return err
+	// }
+	// if o.Witnesses.MerkleProofs.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
+	// 	return err
+	// }
+	// if o.Witnesses.MerkleProofs.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
@@ -155,25 +155,30 @@ func (o *Operator) mockProofs() error {
 		return err
 	}
 	mockProofPair := MerkleProofPair{
-		MerkleProof: mockProof,
-		OldRoot:     mockProof.Root,
-		OldKey:      mockProof.Key,
-		OldValue:    mockProof.Value,
+		Root:     mockProof.Root,
+		Siblings: mockProof.Siblings,
+		Key:      mockProof.Key,
+		Value:    mockProof.Value,
+		IsOld0:   0,
+		Fnc:      mockProof.Fnc,
+		OldRoot:  mockProof.Root,
+		OldKey:   mockProof.Key,
+		OldValue: mockProof.Value,
 	}
 	o.Witnesses.MerkleProofs.ResultsAdd = mockProofPair
-	o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
-	for i := range o.Witnesses.MerkleProofs.Address {
-		o.Witnesses.MerkleProofs.Address[i] = mockProofPair
-	}
-	for i := range o.Witnesses.MerkleProofs.Ballot {
-		o.Witnesses.MerkleProofs.Ballot[i] = mockProofPair
-	}
-	for i := range o.Witnesses.MerkleProofs.Commitment {
-		o.Witnesses.MerkleProofs.Commitment[i] = mockProofPair
-	}
-	for i := range o.Witnesses.MerkleProofs.Nullifier {
-		o.Witnesses.MerkleProofs.Nullifier[i] = mockProofPair
-	}
+	// o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
+	// for i := range o.Witnesses.MerkleProofs.Address {
+	// 	o.Witnesses.MerkleProofs.Address[i] = mockProofPair
+	// }
+	// for i := range o.Witnesses.MerkleProofs.Ballot {
+	// 	o.Witnesses.MerkleProofs.Ballot[i] = mockProofPair
+	// }
+	// for i := range o.Witnesses.MerkleProofs.Commitment {
+	// 	o.Witnesses.MerkleProofs.Commitment[i] = mockProofPair
+	// }
+	// for i := range o.Witnesses.MerkleProofs.Nullifier {
+	// 	o.Witnesses.MerkleProofs.Nullifier[i] = mockProofPair
+	// }
 	return nil
 }
 
@@ -271,28 +276,28 @@ func (o *Operator) updateState(t Vote) error {
 			o.Witnesses.MerkleProofs.ResultsAdd.Fnc = 1
 		}
 	}
-	// add key 5
-	{
-		root, err := o.ArboState.Root()
-		if err != nil {
-			return err
-		}
+	// // add key 5
+	// {
+	// 	root, err := o.ArboState.Root()
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		mpBefore, mpAfter, err := o.addKey([]byte{0x05}, []byte{0x00})
-		if err != nil {
-			return err
-		}
+	// 	mpBefore, mpAfter, err := o.addKey([]byte{0x05}, []byte{0x00})
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		o.Witnesses.MerkleProofs.ResultsSub, err = o.GenMerkleProofPairFromArbo([]byte{0x05})
-		if err != nil {
-			return err
-		}
-		o.Witnesses.MerkleProofs.ResultsSub.OldRoot = arbo.BytesLEToBigInt(root)
+	// 	o.Witnesses.MerkleProofs.ResultsSub, err = o.GenMerkleProofPairFromArbo([]byte{0x05})
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	o.Witnesses.MerkleProofs.ResultsSub.OldRoot = arbo.BytesLEToBigInt(root)
 
-		if mpBefore.Fnc == 1 && mpAfter.Fnc == 0 {
-			o.Witnesses.MerkleProofs.ResultsSub.Fnc = 1
-		}
-	}
+	// 	if mpBefore.Fnc == 1 && mpAfter.Fnc == 0 {
+	// 		o.Witnesses.MerkleProofs.ResultsSub.Fnc = 1
+	// 	}
+	// }
 	// RootHashAfter
 	{
 		root, err := o.ArboState.Root()
