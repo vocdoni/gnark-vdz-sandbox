@@ -222,9 +222,9 @@ func (o *Operator) addKey(k []byte, v []byte) (MerkleProof, MerkleProof, error) 
 	o.ArboState.PrintGraphviz(root)
 
 	if _, b := os.LookupEnv("HACK"); b && bytes.Equal(k, []byte{0x04}) {
-		fmt.Println("\n ...now hack key 0x00 and regenerate proof for key 0x04")
+		fmt.Printf("\n ...now hack key 0x00=%v and regenerate proof for key 0x04\n", v)
 
-		if err := o.ArboState.Update([]byte{0x00}, v); err != nil {
+		if err := o.ArboState.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {
 			return MerkleProof{}, MerkleProof{}, err
 		}
 		mpAfter, err := o.GenMerkleProofFromArbo(k)
@@ -265,12 +265,14 @@ func (o *Operator) updateState(t Vote) error {
 		if err != nil {
 			return err
 		}
-
+		fmt.Printf("%+v\n", mpBefore)
+		fmt.Printf("%+v\n", mpAfter)
 		o.Witnesses.MerkleProofs.ResultsAdd, err = o.GenMerkleProofPairFromArbo([]byte{0x04})
 		if err != nil {
 			return err
 		}
 		o.Witnesses.MerkleProofs.ResultsAdd.OldRoot = arbo.BytesLEToBigInt(root)
+		fmt.Printf("%+v\n", o.Witnesses.MerkleProofs.ResultsAdd)
 
 		if mpBefore.Fnc == 1 && mpAfter.Fnc == 0 {
 			o.Witnesses.MerkleProofs.ResultsAdd.Fnc = 1

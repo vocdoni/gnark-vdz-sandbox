@@ -149,29 +149,32 @@ func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h arboHash) {
 	api.Println("x", mp.Key)
 
 	if mp.Fnc == 1 {
-		api.Println("pair of proofs is adding a leaf, first check exclusion")
-		smt.VerifierFull(api,
-			mp.Root,
-			mp.OldKey,
-			mp.OldValue,
-			0,
-			mp.Key,
-			mp.Value,
-			0,
-			mp.Siblings[:])
-
-	} else {
-		api.Println("pair of proofs is an update, first check old value")
-		smt.VerifierFull(api,
-			mp.OldRoot,
-			mp.Key,
-			mp.Value,
-			0,
-			mp.OldKey,
-			mp.OldValue,
-			0,
-			mp.Siblings[:])
+		api.Println("pair of proofs is adding a leaf, should first check exclusion and then inclusion")
 	}
+	// TODO, can't use `if` in gnark
+
+	smt.VerifierFull(api,
+		mp.Root,
+		mp.OldKey,
+		mp.OldValue,
+		0,
+		mp.Key,
+		mp.Value,
+		0,
+		mp.Siblings[:])
+
+	// } else {
+	// 	api.Println("pair of proofs is an update, first check old value")
+	// 	smt.VerifierFull(api,
+	// 		mp.OldRoot,
+	// 		mp.Key,
+	// 		mp.Value,
+	// 		0,
+	// 		mp.OldKey,
+	// 		mp.OldValue,
+	// 		0,
+	// 		mp.Siblings[:])
+	// }
 	api.Println("x key root", mp.Key, mp.Root)
 	api.Println("x oky orot", mp.OldKey, mp.OldRoot)
 }
