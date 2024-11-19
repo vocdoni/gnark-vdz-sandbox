@@ -18,8 +18,7 @@ package rollup
 
 import (
 	"github.com/consensys/gnark/frontend"
-	"github.com/consensys/gnark/std/hash"
-	"github.com/consensys/gnark/std/hash/mimc"
+	"github.com/vocdoni/gnark-crypto-primitives/poseidon"
 )
 
 const (
@@ -83,18 +82,20 @@ func (circuit *Circuit) PostInit(api frontend.API) error {
 }
 
 func (circuit *Circuit) allocateSlicesMerkleProofs() {
-	circuit.MerkleProofs.ProcessID.Path = make([]frontend.Variable, depth)
-	circuit.MerkleProofs.CensusRoot.Path = make([]frontend.Variable, depth)
-	circuit.MerkleProofs.BallotMode.Path = make([]frontend.Variable, depth)
-	circuit.MerkleProofs.EncryptionKey.Path = make([]frontend.Variable, depth)
-	circuit.MerkleProofs.ResultsAdd.Path = make([]frontend.Variable, depth)
-	circuit.MerkleProofs.ResultsSub.Path = make([]frontend.Variable, depth)
-	for j := range VoteBatchSize {
-		circuit.MerkleProofs.Address[j].Path = make([]frontend.Variable, depth)
-		circuit.MerkleProofs.Nullifier[j].Path = make([]frontend.Variable, depth)
-		circuit.MerkleProofs.Commitment[j].Path = make([]frontend.Variable, depth)
-		circuit.MerkleProofs.Ballot[j].Path = make([]frontend.Variable, depth)
-	}
+	// // TODO: is this needed? if depth is a const
+	// circuit.MerkleProofs.ProcessID.Siblings = make([]frontend.Variable, depth)
+	// circuit.MerkleProofs.CensusRoot.Siblings = make([]frontend.Variable, depth)
+	// circuit.MerkleProofs.BallotMode.Siblings = make([]frontend.Variable, depth)
+	// circuit.MerkleProofs.EncryptionKey.Siblings = make([]frontend.Variable, depth)
+	// circuit.MerkleProofs.ResultsAdd.Siblings = make([]frontend.Variable, depth)
+	// circuit.MerkleProofs.ResultsSub.Siblings = make([]frontend.Variable, depth)
+	//
+	//	for j := range VoteBatchSize {
+	//		circuit.MerkleProofs.Address[j].Siblings = make([]frontend.Variable, depth)
+	//		circuit.MerkleProofs.Nullifier[j].Siblings = make([]frontend.Variable, depth)
+	//		circuit.MerkleProofs.Commitment[j].Siblings = make([]frontend.Variable, depth)
+	//		circuit.MerkleProofs.Ballot[j].Siblings = make([]frontend.Variable, depth)
+	//	}
 }
 
 // Define declares the circuit's constraints
@@ -103,10 +104,7 @@ func (circuit Circuit) Define(api frontend.API) error {
 		return err
 	}
 	// hash function for the merkle proof and the eddsa signature
-	hFunc, err := mimc.NewMiMC(api)
-	if err != nil {
-		return err
-	}
+	hFunc := poseidon.NewPoseidon(api)
 
 	verifyAggregatedZKProof(api)
 	verifyMerkleProofs(api, &hFunc,
@@ -114,10 +112,10 @@ func (circuit Circuit) Define(api frontend.API) error {
 		circuit.RootHashAfter,
 		circuit.MerkleProofs)
 	verifyResults(api, circuit.BallotSum,
-		circuit.MerkleProofs.ResultsAdd.Leaf, circuit.MerkleProofs.ResultsAdd.NewLeaf,
+		circuit.MerkleProofs.ResultsAdd.OldValue, circuit.MerkleProofs.ResultsAdd.Value,
 	)
 	verifyOverwrites(api, circuit.MerkleProofs.Ballot,
-		circuit.MerkleProofs.ResultsSub.Leaf, circuit.MerkleProofs.ResultsSub.NewLeaf,
+		circuit.MerkleProofs.ResultsSub.OldValue, circuit.MerkleProofs.ResultsSub.Value,
 	)
 	verifyStats(api)
 
@@ -128,7 +126,7 @@ func verifyAggregatedZKProof(api frontend.API) {
 	api.AssertIsEqual(1, 1) // TODO: mock, should actually verify Aggregated ZKProof
 }
 
-func verifyMerkleProofs(api frontend.API, hFunc hash.FieldHasher, rootBefore, rootAfter frontend.Variable, mps MerkleProofs) {
+func verifyMerkleProofs(api frontend.API, hFunc arboHash, rootBefore, rootAfter frontend.Variable, mps MerkleProofs) {
 	// check process is untouched
 	verifyMerkleProof(api, hFunc, rootBefore, mps.ProcessID)
 	verifyMerkleProof(api, hFunc, rootBefore, mps.CensusRoot)
@@ -136,25 +134,27 @@ func verifyMerkleProofs(api frontend.API, hFunc hash.FieldHasher, rootBefore, ro
 	verifyMerkleProof(api, hFunc, rootBefore, mps.EncryptionKey)
 	// verify key transitions, order here is fundamental.
 	root := rootBefore
+	api.Println("root is rootBefore, i.e.", root, "=", toHex(root))
 	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsAdd)
+	api.Println("now root is", root, "=", toHex(root))
 	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsSub)
-	for i := range mps.Nullifier {
-		root = verifyMerkleTransition(api, hFunc, root, mps.Nullifier[i])
-	}
-	for i := range mps.Commitment {
-		root = verifyMerkleTransition(api, hFunc, root, mps.Commitment[i])
-	}
-	for i := range mps.Address {
-		root = verifyMerkleTransition(api, hFunc, root, mps.Address[i])
-	}
-	for i := range mps.Ballot {
-		root = verifyMerkleTransition(api, hFunc, root, mps.Ballot[i])
-	}
+	// for i := range mps.Nullifier {
+	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Nullifier[i])
+	// }
+	// for i := range mps.Commitment {
+	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Commitment[i])
+	// }
+	// for i := range mps.Address {
+	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Address[i])
+	// }
+	// for i := range mps.Ballot {
+	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Ballot[i])
+	// }
 	api.AssertIsEqual(root, rootAfter)
 }
 
-func verifyMerkleProof(api frontend.API, hFunc hash.FieldHasher, root frontend.Variable, mp MerkleProof) {
-	api.AssertIsEqual(root, mp.RootHash)
+func verifyMerkleProof(api frontend.API, hFunc arboHash, root frontend.Variable, mp MerkleProof) {
+	api.AssertIsEqual(root, mp.Root)
 	mp.VerifyProof(api, hFunc)
 }
 
@@ -164,10 +164,10 @@ func verifyMerkleProof(api frontend.API, hFunc hash.FieldHasher, root frontend.V
 //   - mp.NewLeaf belongs to mp.NewRootHash
 //
 // and returns mp.NewRootHash
-func verifyMerkleTransition(api frontend.API, hFunc hash.FieldHasher, root frontend.Variable, mp MerkleProofPair) frontend.Variable {
-	api.AssertIsEqual(root, mp.RootHash)
+func verifyMerkleTransition(api frontend.API, hFunc arboHash, root frontend.Variable, mp MerkleProofPair) frontend.Variable {
+	api.AssertIsEqual(root, mp.OldRoot)
 	mp.VerifyProofPair(api, hFunc)
-	return mp.NewRootHash
+	return mp.Root
 }
 
 func verifyResults(api frontend.API, sum, resultsAddBefore, resultsAddAfter frontend.Variable,
@@ -177,10 +177,10 @@ func verifyResults(api frontend.API, sum, resultsAddBefore, resultsAddAfter fron
 }
 
 // verifyOverwrites is not planned for PoC v1.0
-func verifyOverwrites(api frontend.API, ballots, resultsSubBefore, resultsSubAfter frontend.Variable,
+func verifyOverwrites(api frontend.API, ballots [VoteBatchSize]MerkleProofPair, resultsSubBefore, resultsSubAfter frontend.Variable,
 ) {
 	// TODO: mock, sum should be elGamal arithmetic
-	api.AssertIsEqual(api.Add(resultsSubBefore, ballots), resultsSubAfter)
+	// api.AssertIsEqual(api.Add(resultsSubBefore, ballots), resultsSubAfter)
 }
 
 func verifyStats(api frontend.API) {

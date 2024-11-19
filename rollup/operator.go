@@ -18,10 +18,14 @@ package rollup
 
 import (
 	"bytes"
+	"encoding/hex"
+	"fmt"
 	"hash"
+	"math/big"
+	"os"
 
-	"github.com/consensys/gnark-crypto/accumulator/merkletree"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
+	"github.com/consensys/gnark/frontend"
 	"go.vocdoni.io/dvote/db"
 	"go.vocdoni.io/dvote/tree/arbo"
 )
@@ -109,16 +113,16 @@ func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, 
 		return err
 	}
 	o.ArboState = tree
-	if err := o.ArboState.Add([]byte{0x00}, processID); err != nil {
+	if _, _, err := o.addKey([]byte{0x00}, processID); err != nil {
 		return err
 	}
-	if err := o.ArboState.Add([]byte{0x01}, censusRoot); err != nil {
+	if _, _, err := o.addKey([]byte{0x01}, censusRoot); err != nil {
 		return err
 	}
-	if err := o.ArboState.Add([]byte{0x02}, ballotMode); err != nil {
+	if _, _, err := o.addKey([]byte{0x02}, ballotMode); err != nil {
 		return err
 	}
-	if err := o.ArboState.Add([]byte{0x03}, encryptionKey); err != nil {
+	if _, _, err := o.addKey([]byte{0x03}, encryptionKey); err != nil {
 		return err
 	}
 
@@ -152,8 +156,9 @@ func (o *Operator) mockProofs() error {
 	}
 	mockProofPair := MerkleProofPair{
 		MerkleProof: mockProof,
-		NewRootHash: []byte{0x00},
-		NewLeaf:     []byte{0xff},
+		OldRoot:     mockProof.Root,
+		OldKey:      mockProof.Key,
+		OldValue:    mockProof.Value,
 	}
 	o.Witnesses.MerkleProofs.ResultsAdd = mockProofPair
 	o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
@@ -172,96 +177,129 @@ func (o *Operator) mockProofs() error {
 	return nil
 }
 
+func toHex(v frontend.Variable) string {
+	switch v := v.(type) {
+	case (*big.Int):
+		return hex.EncodeToString(arbo.BigIntToBytesLE(32, v)[:4])
+	case int:
+		return fmt.Sprintf("%d", v)
+	case []byte:
+		return fmt.Sprintf("(byte)%x", v)
+	default:
+		return fmt.Sprintf("(unknown)%+v", v)
+	}
+}
+
+func (o *Operator) addKey(k []byte, v []byte) (MerkleProof, MerkleProof, error) {
+	fmt.Println("\nwill add key", "k=", k, "v=", v)
+	mpBefore, err := o.GenMerkleProofFromArbo(k)
+	if err != nil {
+		return MerkleProof{}, MerkleProof{}, err
+	}
+	fmt.Println("before:", "root=", toHex(mpBefore.Root), "k=", mpBefore.Key, "v=", mpBefore.Value)
+	for i := range mpBefore.Siblings {
+		fmt.Println("siblings=", toHex(mpBefore.Siblings[i]))
+	}
+	if err := o.ArboState.Add(k, v); err != nil {
+		return MerkleProof{}, MerkleProof{}, err
+	}
+
+	mpAfter, err := o.GenMerkleProofFromArbo(k)
+	if err != nil {
+		return MerkleProof{}, MerkleProof{}, err
+	}
+	fmt.Println("after: ", "root=", toHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
+	for i := range mpAfter.Siblings {
+		fmt.Println("siblings=", toHex(mpAfter.Siblings[i]))
+	}
+
+	root, _ := o.ArboState.Root()
+	o.ArboState.PrintGraphviz(root)
+
+	if _, b := os.LookupEnv("HACK"); b && bytes.Equal(k, []byte{0x04}) {
+		fmt.Println("\n ...now hack key 0x00 and regenerate proof for key 0x04")
+
+		if err := o.ArboState.Update([]byte{0x00}, v); err != nil {
+			return MerkleProof{}, MerkleProof{}, err
+		}
+		mpAfter, err := o.GenMerkleProofFromArbo(k)
+		if err != nil {
+			return MerkleProof{}, MerkleProof{}, err
+		}
+		fmt.Println("hacked:", "root=", toHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
+		for i := range mpAfter.Siblings {
+			fmt.Println("siblings=", toHex(mpAfter.Siblings[i]))
+		}
+
+	}
+
+	return mpBefore, mpAfter, nil
+}
+
 // updateState updates the state according to transfer
 // numTransfer is the number of the transfer currently handled (between 0 and BatchSizeCircuit)
 func (o *Operator) updateState(t Vote) error {
-	// set witnesses for the leaves
+	// RootHashBefore
 
-	// set witnesses for the public keys
-	// o.Witnesses.PublicKeysSender.A.X = senderAccount.pubKey.A.X
-	// o.Witnesses.PublicKeysSender.A.Y = senderAccount.pubKey.A.Y
-	// fmt.Println("PublicKeysSender", o.Witnesses.PublicKeysSender.A.Y)
-
-	// // set witnesses for the accounts before update
-	// o.Witnesses.Process.ProcessID = senderAccount.index
-	// o.Witnesses.Process.CensusRoot = senderAccount.censusRoot
-	// o.Witnesses.Process.BallotMode = senderAccount.balance
-	// o.Witnesses.Process.ResultsAdd = senderAccount.balance
-	// o.Witnesses.Process.ResultsSub = senderAccount.balance
-
-	//  Set witnesses for the proof of inclusion of sender and receivers account before update
-	var buf bytes.Buffer
-	_, err := buf.Write(o.HashState)
-	if err != nil {
-		return err
-	}
-	merkleRootBefore, proofInclusionSenderBefore, numLeaves, err := merkletree.BuildReaderProof(&buf, o.h, o.h.Size(), 0)
-	if err != nil {
-		return err
+	{
+		root, err := o.ArboState.Root()
+		if err != nil {
+			return err
+		}
+		o.Witnesses.RootHashBefore = arbo.BytesLEToBigInt(root)
 	}
 
-	// verify the proof in plain go...
-	merkletree.VerifyProof(o.h, merkleRootBefore, proofInclusionSenderBefore, 0, numLeaves)
+	// add key 4
+	{
+		root, err := o.ArboState.Root()
+		if err != nil {
+			return err
+		}
 
-	o.Witnesses.RootHashBefore = merkleRootBefore
-	// o.Witnesses.MerkleProofSenderBefore.RootHash = merkleRootBefore
+		mpBefore, mpAfter, err := o.addKey([]byte{0x04}, []byte{0x00})
+		if err != nil {
+			return err
+		}
 
-	// for i := 0; i < len(proofInclusionSenderBefore); i++ {
-	// 	fmt.Println(len(o.Witnesses.MerkleProofSenderBefore.Path), "vs", len(proofInclusionSenderBefore))
-	// 	o.Witnesses.MerkleProofSenderBefore.Path[i] = proofInclusionSenderBefore[i]
-	// }
+		o.Witnesses.MerkleProofs.ResultsAdd, err = o.GenMerkleProofPairFromArbo([]byte{0x04})
+		if err != nil {
+			return err
+		}
+		o.Witnesses.MerkleProofs.ResultsAdd.OldRoot = arbo.BytesLEToBigInt(root)
 
-	// // set witnesses for the transfer
-	// o.Witnesses.Ballots.ChoicesAdd = t.amount
-	// o.Witnesses.Ballots.ChoicesSub = t.amount
-	// o.Witnesses.Ballots.Signature.R.X = t.signature.R.X
-	// o.Witnesses.Ballots.Signature.R.Y = t.signature.R.Y
-	// o.Witnesses.Ballots.Signature.S = t.signature.S[:]
-
-	// verifying the signature. The msg is the hash (o.h) of the transfer
-	// nonce ∥ amount ∥ senderpubKey(x&y) ∥ receiverPubkey(x&y)
-	resSig, err := t.Verify(o.h)
-	if err != nil {
-		return err
+		if mpBefore.Fnc == 1 && mpAfter.Fnc == 0 {
+			o.Witnesses.MerkleProofs.ResultsAdd.Fnc = 1
+		}
 	}
-	if !resSig {
-		return ErrWrongSignature
+	// add key 5
+	{
+		root, err := o.ArboState.Root()
+		if err != nil {
+			return err
+		}
+
+		mpBefore, mpAfter, err := o.addKey([]byte{0x05}, []byte{0x00})
+		if err != nil {
+			return err
+		}
+
+		o.Witnesses.MerkleProofs.ResultsSub, err = o.GenMerkleProofPairFromArbo([]byte{0x05})
+		if err != nil {
+			return err
+		}
+		o.Witnesses.MerkleProofs.ResultsSub.OldRoot = arbo.BytesLEToBigInt(root)
+
+		if mpBefore.Fnc == 1 && mpAfter.Fnc == 0 {
+			o.Witnesses.MerkleProofs.ResultsSub.Fnc = 1
+		}
 	}
-
-	// // count vote in results
-	// dummy := senderAccount.balance
-
-	// // set the witnesses for the account after update
-	// o.Witnesses.Process.ProcessID = senderAccount.index
-	// o.Witnesses.Process.CensusRoot = senderAccount.censusRoot
-	// o.Witnesses.Process.BallotMode = senderAccount.balance
-	// o.Witnesses.Results.ResultsAdd = dummy.Add(&senderAccount.balance, &t.amount)
-	// o.Witnesses.Results.ResultsSub = dummy.Add(&senderAccount.balance, &t.amount)
-
-	// // update the state of the operator
-	// copy(o.State[int(posSender)*SizeAccount:], senderAccount.Serialize())
-	// o.h.Reset()
-	// _, _ = o.h.Write(senderAccount.Serialize())
-	// bufSender := o.h.Sum([]byte{})
-	// copy(o.HashState[int(posSender)*o.h.Size():(int(posSender)+1)*o.h.Size()], bufSender)
-
-	//  Set witnesses for the proof of inclusion of sender and receivers account after update
-	// buf.Reset()
-	_, err = buf.Write(o.HashState)
-	if err != nil {
-		return err
-	}
-	merkleRootAfer, proofInclusionSenderAfter, _, err := merkletree.BuildReaderProof(&buf, o.h, o.h.Size(), 0)
-	if err != nil {
-		return err
-	}
-	// merkleProofHelperSenderAfter := merkle.GenerateProofHelper(proofInclusionSenderAfter, posSender, numLeaves)
-
-	o.Witnesses.RootHashAfter = merkleRootAfer
-	// o.Witnesses.MerkleProofSenderAfter.RootHash = merkleRootAfer
-
-	for i := 0; i < len(proofInclusionSenderAfter); i++ {
-		// o.Witnesses.MerkleProofSenderAfter.Path[i] = proofInclusionSenderAfter[i]
+	// RootHashAfter
+	{
+		root, err := o.ArboState.Root()
+		if err != nil {
+			return err
+		}
+		o.Witnesses.RootHashAfter = arbo.BytesLEToBigInt(root)
 	}
 
 	return nil

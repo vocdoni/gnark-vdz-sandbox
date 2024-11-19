@@ -17,8 +17,8 @@ limitations under the License.
 package rollup
 
 import (
-	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -26,8 +26,10 @@ import (
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
+	"github.com/consensys/gnark/logger"
 	"github.com/consensys/gnark/profile"
 	"github.com/consensys/gnark/test"
+	"github.com/rs/zerolog"
 	"go.vocdoni.io/dvote/db/metadb"
 )
 
@@ -40,7 +42,7 @@ func (t *circuitUpdateAccount) Define(api frontend.API) error {
 	}
 
 	verifyResults(api, t.BallotSum,
-		t.MerkleProofs.ResultsAdd.Leaf, t.MerkleProofs.ResultsAdd.NewLeaf,
+		t.MerkleProofs.ResultsAdd.Value, t.MerkleProofs.ResultsAdd.OldValue,
 	)
 	return nil
 }
@@ -136,9 +138,9 @@ func TestCircuitFull(t *testing.T) {
 	rollupCircuit.allocateSlicesMerkleProofs()
 
 	_ = operator.Witnesses.PostInit(nil)
-	wit := operator.Witnesses
-	js, _ := json.MarshalIndent(wit, "", "  ")
-	fmt.Printf("\n\n%s\n\n", js)
+	// wit := operator.Witnesses
+	// js, _ := json.MarshalIndent(wit, "", "  ")
+	// fmt.Printf("\n\n%s\n\n", js)
 
 	// TODO full circuit has some unconstrained inputs, that's odd.
 	assert.ProverSucceeded(
@@ -149,11 +151,16 @@ func TestCircuitFull(t *testing.T) {
 }
 
 func TestCircuitCompile(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping rollup tests for circleCI")
-	}
-
 	operator, users := createOperator(nbAccounts)
+
+	if err := operator.initState(metadb.NewTest(t),
+		[]byte{0xca, 0xfe, 0x00},
+		[]byte{0xca, 0xfe, 0x01},
+		[]byte{0xca, 0xfe, 0x02},
+		[]byte{0xca, 0xfe, 0x03},
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	// read accounts involved in the transfer
 	sender, err := operator.ReadAccount(0)
@@ -185,14 +192,19 @@ func TestCircuitCompile(t *testing.T) {
 	// we allocate the slices of the circuit before compiling it
 	var inclusionProofCircuit Circuit
 	inclusionProofCircuit.allocateSlicesMerkleProofs()
+	logger.Set(zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "15:04:05"}).With().Timestamp().Logger())
 	p := profile.Start()
-
 	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &inclusionProofCircuit)
 	if err != nil {
 		panic(err)
 	}
 	p.Stop()
 	fmt.Println("constraints", p.NbConstraints())
+
+	if testing.Short() {
+		return
+		// t.Skip("skipping rollup tests for circleCI")
+	}
 
 	// groth16 zkSNARK: Setup
 	pk, vk, err := groth16.Setup(ccs)
