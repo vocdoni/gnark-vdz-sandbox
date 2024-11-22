@@ -18,6 +18,7 @@ package rollup
 
 import (
 	"github.com/consensys/gnark/frontend"
+	"github.com/vocdoni/gnark-crypto-primitives/arbo"
 	"github.com/vocdoni/gnark-crypto-primitives/poseidon"
 )
 
@@ -104,10 +105,8 @@ func (circuit Circuit) Define(api frontend.API) error {
 		return err
 	}
 	// hash function for the merkle proof and the eddsa signature
-	hFunc := poseidon.NewPoseidon(api)
-
 	verifyAggregatedZKProof(api)
-	verifyMerkleProofs(api, &hFunc,
+	verifyMerkleProofs(api, poseidon.Hash,
 		circuit.RootHashBefore,
 		circuit.RootHashAfter,
 		circuit.MerkleProofs)
@@ -126,7 +125,7 @@ func verifyAggregatedZKProof(api frontend.API) {
 	api.AssertIsEqual(1, 1) // TODO: mock, should actually verify Aggregated ZKProof
 }
 
-func verifyMerkleProofs(api frontend.API, hFunc arboHash, rootBefore, rootAfter frontend.Variable, mps MerkleProofs) {
+func verifyMerkleProofs(api frontend.API, hFunc arbo.Hash, rootBefore, rootAfter frontend.Variable, mps MerkleProofs) {
 	// check process is untouched
 	// verifyMerkleProof(api, hFunc, rootBefore, mps.ProcessID)
 	// verifyMerkleProof(api, hFunc, rootBefore, mps.CensusRoot)
@@ -154,7 +153,7 @@ func verifyMerkleProofs(api frontend.API, hFunc arboHash, rootBefore, rootAfter 
 	api.AssertIsEqual(root, rootAfter)
 }
 
-func verifyMerkleProof(api frontend.API, hFunc arboHash, root frontend.Variable, mp MerkleProof) {
+func verifyMerkleProof(api frontend.API, hFunc arbo.Hash, root frontend.Variable, mp MerkleProof) {
 	api.AssertIsEqual(root, mp.Root)
 	mp.VerifyProof(api, hFunc)
 }
@@ -165,7 +164,7 @@ func verifyMerkleProof(api frontend.API, hFunc arboHash, root frontend.Variable,
 //   - mp.NewLeaf belongs to mp.NewRootHash
 //
 // and returns mp.NewRootHash
-func verifyMerkleTransition(api frontend.API, hFunc arboHash, root frontend.Variable, mp MerkleProofPair) frontend.Variable {
+func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, root frontend.Variable, mp MerkleProofPair) frontend.Variable {
 	api.AssertIsEqual(root, mp.OldRoot)
 	mp.VerifyProofPair(api, hFunc)
 	return mp.Root

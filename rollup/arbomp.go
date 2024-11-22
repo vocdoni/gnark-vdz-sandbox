@@ -1,12 +1,14 @@
 package rollup
 
 import (
+	"bytes"
+	"fmt"
 	"math/big"
 
 	"github.com/consensys/gnark/frontend"
 	garbo "github.com/vocdoni/gnark-crypto-primitives/arbo"
 	"github.com/vocdoni/gnark-crypto-primitives/poseidon"
-	smt "github.com/vocdoni/gnark-crypto-primitives/smt"
+	"github.com/vocdoni/gnark-crypto-primitives/smt"
 	"go.vocdoni.io/dvote/tree/arbo"
 )
 
@@ -46,6 +48,8 @@ func (o *Operator) GenMerkleProofPairFromArbo(k []byte) (MerkleProofPair, error)
 	if err != nil {
 		return MerkleProofPair{}, err
 	}
+	fmt.Println("existence?", existence, kAux, v)
+
 	var cp MerkleProofPair
 	root, err := o.ArboState.Root()
 	if err != nil {
@@ -73,6 +77,10 @@ func (o *Operator) GenMerkleProofPairFromArbo(k []byte) (MerkleProofPair, error)
 	}
 
 	cp.IsOld0 = 0
+	if !existence && bytes.Equal(kAux, []byte{0x00}) && bytes.Equal(v, []byte{0x00}) {
+		cp.IsOld0 = 1
+	}
+
 	cp.OldFnc = 0
 
 	return cp, nil
@@ -95,10 +103,16 @@ func NewMerkleProofFromArbo(root, leafK, leafV, packedSiblings []byte, exists bo
 	if err != nil {
 		return MerkleProof{}, err
 	}
+	fmt.Println("existence?", exists, leafK, leafV)
 
 	fnc := int(0) // inclusion
 	if !exists {
 		fnc = 1 // non-inclusion
+	}
+
+	isOld0 := 0
+	if !exists && bytes.Equal(leafK, []byte{}) && bytes.Equal(leafV, []byte{}) {
+		isOld0 = 1
 	}
 
 	return MerkleProof{
@@ -109,7 +123,7 @@ func NewMerkleProofFromArbo(root, leafK, leafV, packedSiblings []byte, exists bo
 		Value: arbo.BytesLEToBigInt(leafV),
 
 		Fnc:    fnc,
-		IsOld0: 0,
+		IsOld0: isOld0,
 	}, nil
 }
 
@@ -129,27 +143,19 @@ func padSiblings(unpackedSiblings [][]byte) [depth]frontend.Variable {
 // true if the first element of the proof set is a leaf of data in the Merkle
 // root. False is returned if the proof set or Merkle root is nil, and if
 // 'numLeaves' equals 0.
-func (mp *MerkleProof) VerifyProof(api frontend.API, h arboHash) {
-	garbo.CheckProof(api, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
+func (mp *MerkleProof) VerifyProof(api frontend.API, h garbo.Hash) {
+	garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
 }
 
-func (mp *MerkleProofPair) VerifyProof(api frontend.API, h arboHash) {
-	garbo.CheckProof(api, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
+func (mp *MerkleProofPair) VerifyProof(api frontend.API, h garbo.Hash) {
+	garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
 }
 
 // VerifyProof takes a Merkle root, a proofSet, and a proofIndex and returns
 // true if the first element of the proof set is a leaf of data in the Merkle
 // root. False is returned if the proof set or Merkle root is nil, and if
 // 'numLeaves' equals 0.
-func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h arboHash) {
-	api.Println("key, value, root", mp.Key, mp.Value, toHex(mp.Root), mp.Fnc)
-	api.Println("oky, ovlue, orot", mp.OldKey, mp.OldValue, toHex(mp.OldRoot))
-	for i := range mp.Siblings {
-		api.Println("sib", toHex(mp.Siblings[i]))
-	}
-	garbo.CheckProof(api, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
-	api.Println("x", mp.Key)
-
+func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h garbo.Hash) {
 	if mp.OldFnc == 1 && mp.Fnc == 0 {
 		api.Println("pair of proofs is adding a leaf, should first check exclusion and then inclusion")
 	}
@@ -159,17 +165,36 @@ func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h arboHash) {
 	if mp.OldFnc == 0 && mp.Fnc == 1 {
 		api.Println("pair of proofs is removing a leaf, should check inclusion and then exclusion")
 	}
-	// TODO, can't use `if` in gnark
+	api.Println("key, value, root", mp.Key, mp.Value, toHex(mp.Root), mp.Fnc)
+	api.Println("oky, ovlue, orot", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.OldFnc)
+	for i := range mp.Siblings {
+		api.Println("sib", toHex(mp.Siblings[i]))
+	}
+	// garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
 
-	smt.VerifierFull(api,
-		mp.Root,
+	// garbo.CheckAdditionProof(api,
+	// 	poseidon.Hash,
+	// 	mp.Key,
+	// 	mp.Value,
+	// 	mp.Root,
+	// 	mp.OldKey,
+	// 	mp.OldValue,
+	// 	mp.OldRoot,
+	// 	mp.Siblings[:])
+
+	smt.Processor(api,
+		mp.OldRoot,
+		mp.Siblings[:],
 		mp.OldKey,
 		mp.OldValue,
 		mp.IsOld0,
 		mp.Key,
 		mp.Value,
+		mp.OldFnc,
 		mp.Fnc,
-		mp.Siblings[:])
+	)
+
+	api.Println("proved transition")
 
 	// } else {
 	// 	api.Println("pair of proofs is an update, first check old value")

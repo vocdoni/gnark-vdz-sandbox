@@ -116,15 +116,20 @@ func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, 
 	if _, _, err := o.addKey([]byte{0x00}, processID); err != nil {
 		return err
 	}
-	if _, _, err := o.addKey([]byte{0x01}, censusRoot); err != nil {
-		return err
-	}
+	// if _, _, err := o.addKey([]byte{0x01}, censusRoot); err != nil {
+	// 	return err
+	// }
 	if _, _, err := o.addKey([]byte{0x02}, ballotMode); err != nil {
 		return err
 	}
-	if _, _, err := o.addKey([]byte{0x03}, encryptionKey); err != nil {
-		return err
-	}
+	// if _, _, err := o.addKey([]byte{0x03}, encryptionKey); err != nil {
+	// 	return err
+	// }
+
+	// // debug: add a leaf far away
+	// if _, _, err := o.addKey([]byte{0x1f}, ballotMode); err != nil {
+	// 	return err
+	// }
 
 	// mock, to avoid nulls
 	o.Witnesses.NumVotes = 0
@@ -202,7 +207,8 @@ func (o *Operator) addKey(k []byte, v []byte) (MerkleProof, MerkleProof, error) 
 	if err != nil {
 		return MerkleProof{}, MerkleProof{}, err
 	}
-	fmt.Println("before:", "root=", toHex(mpBefore.Root), "k=", mpBefore.Key, "v=", mpBefore.Value)
+	fmt.Println("before:", "root=", toHex(mpBefore.Root), "k=", mpBefore.Key, "v=", mpBefore.Value,
+		"isOld0=", mpBefore.IsOld0, "fnc=", mpBefore.Fnc)
 	for i := range mpBefore.Siblings {
 		fmt.Println("siblings=", toHex(mpBefore.Siblings[i]))
 	}
@@ -262,20 +268,25 @@ func (o *Operator) updateState(t Vote) error {
 			return err
 		}
 
-		mpBefore, mpAfter, err := o.addKey([]byte{0x04}, []byte{0x00})
+		mpBefore, mpAfter, err := o.addKey([]byte{0x03}, []byte{0x00})
 		if err != nil {
 			return err
 		}
 		fmt.Printf("%+v\n", mpBefore)
 		fmt.Printf("%+v\n", mpAfter)
-		o.Witnesses.MerkleProofs.ResultsAdd, err = o.GenMerkleProofPairFromArbo([]byte{0x04})
+		o.Witnesses.MerkleProofs.ResultsAdd, err = o.GenMerkleProofPairFromArbo([]byte{0x03})
 		if err != nil {
 			return err
 		}
 		o.Witnesses.MerkleProofs.ResultsAdd.OldRoot = arbo.BytesLEToBigInt(root)
 		fmt.Printf("%+v\n", o.Witnesses.MerkleProofs.ResultsAdd)
 
+		o.Witnesses.MerkleProofs.ResultsAdd.Siblings = mpBefore.Siblings
+
+		o.Witnesses.MerkleProofs.ResultsAdd.IsOld0 = mpBefore.IsOld0
 		o.Witnesses.MerkleProofs.ResultsAdd.OldFnc = mpBefore.Fnc
+		o.Witnesses.MerkleProofs.ResultsAdd.OldKey = mpBefore.Key
+		o.Witnesses.MerkleProofs.ResultsAdd.OldValue = mpBefore.Value
 
 	}
 	// // add key 5
