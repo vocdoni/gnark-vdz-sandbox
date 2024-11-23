@@ -228,7 +228,7 @@ func (o *Operator) addKey(k []byte, v []byte) (MerkleProof, MerkleProof, error) 
 	root, _ := o.ArboState.Root()
 	o.ArboState.PrintGraphviz(root)
 
-	if _, b := os.LookupEnv("HACK"); b && bytes.Equal(k, []byte{0x04}) {
+	if _, b := os.LookupEnv("HACK"); b && bytes.Equal(k, []byte{0x03}) {
 		fmt.Printf("\n ...now hack key 0x00=%v and regenerate proof for key 0x04\n", v)
 
 		if err := o.ArboState.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {

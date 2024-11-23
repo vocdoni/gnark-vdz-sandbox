@@ -165,6 +165,7 @@ func verifyMerkleProof(api frontend.API, hFunc arbo.Hash, root frontend.Variable
 //
 // and returns mp.NewRootHash
 func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, root frontend.Variable, mp MerkleProofPair) frontend.Variable {
+	api.Println("will verify merkle transition from root", toHex(mp.OldRoot), "->", toHex(mp.Root))
 	api.AssertIsEqual(root, mp.OldRoot)
 	mp.VerifyProofPair(api, hFunc)
 	return mp.Root

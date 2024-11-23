@@ -166,7 +166,7 @@ func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h garbo.Hash) {
 		api.Println("pair of proofs is removing a leaf, should check inclusion and then exclusion")
 	}
 	api.Println("key, value, root", mp.Key, mp.Value, toHex(mp.Root), mp.Fnc)
-	api.Println("oky, ovlue, orot", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.OldFnc)
+	api.Println("oky, ovlue, orot", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.OldFnc, mp.IsOld0)
 	for i := range mp.Siblings {
 		api.Println("sib", toHex(mp.Siblings[i]))
 	}
@@ -182,7 +182,7 @@ func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h garbo.Hash) {
 	// 	mp.OldRoot,
 	// 	mp.Siblings[:])
 
-	smt.Processor(api,
+	root := smt.Processor(api,
 		mp.OldRoot,
 		mp.Siblings[:],
 		mp.OldKey,
@@ -193,6 +193,8 @@ func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h garbo.Hash) {
 		mp.OldFnc,
 		mp.Fnc,
 	)
+
+	api.AssertIsEqual(root, mp.Root)
 
 	api.Println("proved transition")
 
@@ -208,8 +210,8 @@ func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h garbo.Hash) {
 	// 		0,
 	// 		mp.Siblings[:])
 	// }
-	api.Println("x key root", mp.Key, mp.Root)
-	api.Println("x oky orot", mp.OldKey, mp.OldRoot)
+	api.Println("x key root", mp.Key, toHex(mp.Root), mp.Root)
+	api.Println("x oky orot", mp.OldKey, toHex(mp.OldRoot), mp.OldRoot)
 }
 
 // TODO: use arbo.Hash
