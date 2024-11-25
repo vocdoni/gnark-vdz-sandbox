@@ -111,7 +111,7 @@ func (circuit Circuit) Define(api frontend.API) error {
 		circuit.RootHashAfter,
 		circuit.MerkleProofs)
 	verifyResults(api, circuit.BallotSum,
-		circuit.MerkleProofs.ResultsAdd.OldValue, circuit.MerkleProofs.ResultsAdd.Value,
+		circuit.MerkleProofs.ResultsAdd.OldValue, circuit.MerkleProofs.ResultsAdd.NewValue,
 	)
 	// verifyOverwrites(api, circuit.MerkleProofs.Ballot,
 	// 	circuit.MerkleProofs.ResultsSub.OldValue, circuit.MerkleProofs.ResultsSub.Value,
@@ -133,11 +133,11 @@ func verifyMerkleProofs(api frontend.API, hFunc arbo.Hash, rootBefore, rootAfter
 	// verifyMerkleProof(api, hFunc, rootBefore, mps.EncryptionKey)
 	// verify key transitions, order here is fundamental.
 	root := rootBefore
-	api.Println("root is rootBefore, i.e.", root, "=", toHex(root))
+	api.Println("root is rootBefore, i.e.", toHex(root))
 	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsAdd)
-	api.Println("now root is", root, "=", toHex(root))
+	api.Println("now root is", toHex(root))
 	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsSub)
-	api.Println("and now root is", root, "=", toHex(root), "should be equal to rootAfter", toHex(root))
+	api.Println("and now root is", toHex(root), "should be equal to rootAfter", toHex(root))
 	// for i := range mps.Nullifier {
 	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Nullifier[i])
 	// }
@@ -159,16 +159,16 @@ func verifyMerkleProof(api frontend.API, hFunc arbo.Hash, root frontend.Variable
 }
 
 // verifyMerkleTransition asserts a MerkleTransition is valid
-//   - mp.RootHash matches passed root
-//   - mp.Leaf belongs to mp.RootHash
-//   - mp.NewLeaf belongs to mp.NewRootHash
+//   - mp.OldRoot matches passed oldRoot
+//   - mp.OldKey belongs to mp.OldRoot
+//   - mp.NewKey belongs to mp.NewRoot
 //
-// and returns mp.NewRootHash
-func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, root frontend.Variable, mp MerkleTransition) frontend.Variable {
-	api.Println("will verify merkle transition from root", toHex(mp.OldRoot), "->", toHex(mp.Root))
-	api.AssertIsEqual(root, mp.OldRoot)
+// and returns mp.NewRoot
+func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, oldRoot frontend.Variable, mp MerkleTransition) frontend.Variable {
+	api.Println("will verify merkle transition from root", toHex(mp.OldRoot), "->", toHex(mp.NewRoot))
+	api.AssertIsEqual(oldRoot, mp.OldRoot)
 	mp.VerifyProofPair(api, hFunc)
-	return mp.Root
+	return mp.NewRoot
 }
 
 func verifyResults(api frontend.API, sum, resultsAddBefore, resultsAddAfter frontend.Variable,

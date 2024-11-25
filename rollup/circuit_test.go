@@ -42,7 +42,7 @@ func (t *circuitUpdateAccount) Define(api frontend.API) error {
 	}
 
 	verifyResults(api, t.BallotSum,
-		t.MerkleProofs.ResultsAdd.Value, t.MerkleProofs.ResultsAdd.OldValue,
+		t.MerkleProofs.ResultsAdd.NewValue, t.MerkleProofs.ResultsAdd.OldValue,
 	)
 	return nil
 }

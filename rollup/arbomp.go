@@ -24,7 +24,7 @@ type ArboProof struct {
 
 // MerkleProof stores the leaf, the path, and the root hash.
 type MerkleProof struct {
-	// Key+Value hashed through Siblings path, should produce Root hash
+	// Key + Value hashed through Siblings path, should produce Root hash
 	Root     frontend.Variable
 	Siblings [depth]frontend.Variable
 	Key      frontend.Variable
@@ -34,13 +34,13 @@ type MerkleProof struct {
 
 // MerkleTransition stores a pair of leaves and root hashes, and a single path common to both proofs
 type MerkleTransition struct {
-	// Key+Value hashed through Siblings path, should produce Root hash
-	Root     frontend.Variable
+	// NewKey + NewValue hashed through Siblings path, should produce NewRoot hash
+	NewRoot  frontend.Variable
 	Siblings [depth]frontend.Variable
-	Key      frontend.Variable
-	Value    frontend.Variable
+	NewKey   frontend.Variable
+	NewValue frontend.Variable
 
-	// OldKey+OldValue hashed through same Siblings should produce OldRoot hash
+	// OldKey + OldValue hashed through same Siblings should produce OldRoot hash
 	OldRoot  frontend.Variable
 	OldKey   frontend.Variable
 	OldValue frontend.Variable
@@ -81,9 +81,9 @@ func MerkleTransitionFromProofPair(before, after ArboProof) MerkleTransition {
 		OldRoot:  mpBefore.Root,
 		OldKey:   mpBefore.Key,
 		OldValue: mpBefore.Value,
-		Root:     mpAfter.Root,
-		Key:      mpAfter.Key,
-		Value:    mpAfter.Value,
+		NewRoot:  mpAfter.Root,
+		NewKey:   mpAfter.Key,
+		NewValue: mpAfter.Value,
 		IsOld0:   isOld0,
 		Fnc0:     fnc0,
 		Fnc1:     fnc1,
@@ -149,7 +149,7 @@ func (mp *MerkleProof) VerifyProof(api frontend.API, h garbo.Hash) {
 }
 
 func (mp *MerkleTransition) VerifyProof(api frontend.API, h garbo.Hash) {
-	garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
+	garbo.CheckInclusionProof(api, h, mp.NewKey, mp.NewValue, mp.NewRoot, mp.Siblings[:])
 }
 
 // VerifyProof takes a Merkle root, a proofSet, and a proofIndex and returns
@@ -157,31 +157,11 @@ func (mp *MerkleTransition) VerifyProof(api frontend.API, h garbo.Hash) {
 // root. False is returned if the proof set or Merkle root is nil, and if
 // 'numLeaves' equals 0.
 func (mp *MerkleTransition) VerifyProofPair(api frontend.API, h garbo.Hash) {
-	if mp.Fnc0 == 1 && mp.Fnc1 == 0 {
-		api.Println("pair of proofs is adding a leaf")
-	}
-	if mp.Fnc0 == 0 && mp.Fnc1 == 1 {
-		api.Println("pair of proofs is updating a leaf")
-	}
-	if mp.Fnc0 == 1 && mp.Fnc1 == 1 {
-		api.Println("pair of proofs is removing a leaf")
-	}
-	api.Println("key, value, root, fnc0,1", mp.Key, mp.Value, toHex(mp.Root), mp.Fnc0, mp.Fnc1)
-	api.Println("oky, ovlue, orot, isold0", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.IsOld0)
+	api.Println("old key, value, root, isold0 = ", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.IsOld0)
+	api.Println("new key, value, root, fnc0,1 = ", mp.NewKey, mp.NewValue, toHex(mp.NewRoot), mp.Fnc0, mp.Fnc1)
 	for i := range mp.Siblings {
-		api.Println("sib", toHex(mp.Siblings[i]))
+		api.Println("siblings", toHex(mp.Siblings[i]))
 	}
-	// garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
-
-	// garbo.CheckAdditionProof(api,
-	// 	poseidon.Hash,
-	// 	mp.Key,
-	// 	mp.Value,
-	// 	mp.Root,
-	// 	mp.OldKey,
-	// 	mp.OldValue,
-	// 	mp.OldRoot,
-	// 	mp.Siblings[:])
 
 	root := smt.Processor(api,
 		mp.OldRoot,
@@ -189,30 +169,15 @@ func (mp *MerkleTransition) VerifyProofPair(api frontend.API, h garbo.Hash) {
 		mp.OldKey,
 		mp.OldValue,
 		mp.IsOld0,
-		mp.Key,
-		mp.Value,
+		mp.NewKey,
+		mp.NewValue,
 		mp.Fnc0,
 		mp.Fnc1,
 	)
 
-	api.AssertIsEqual(root, mp.Root)
+	api.AssertIsEqual(root, mp.NewRoot)
 
-	api.Println("proved transition")
-
-	// } else {
-	// 	api.Println("pair of proofs is an update, first check old value")
-	// 	smt.VerifierFull(api,
-	// 		mp.OldRoot,
-	// 		mp.Key,
-	// 		mp.Value,
-	// 		0,
-	// 		mp.OldKey,
-	// 		mp.OldValue,
-	// 		0,
-	// 		mp.Siblings[:])
-	// }
-	api.Println("x key root", mp.Key, toHex(mp.Root), mp.Root)
-	api.Println("x oky orot", mp.OldKey, toHex(mp.OldRoot), mp.OldRoot)
+	api.Println("proved transition", toHex(mp.OldRoot), "->", toHex(mp.NewRoot))
 }
 
 // TODO: use arbo.Hash
