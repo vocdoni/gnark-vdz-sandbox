@@ -2,12 +2,10 @@ package rollup
 
 import (
 	"bytes"
-	"fmt"
 	"math/big"
 
 	"github.com/consensys/gnark/frontend"
 	garbo "github.com/vocdoni/gnark-crypto-primitives/arbo"
-	"github.com/vocdoni/gnark-crypto-primitives/poseidon"
 	"github.com/vocdoni/gnark-crypto-primitives/smt"
 	"go.vocdoni.io/dvote/tree/arbo"
 )
@@ -49,8 +47,8 @@ type MerkleTransition struct {
 	Fnc1     frontend.Variable
 }
 
-// MerkleTransitionFromProofPair generates a MerkleTransition based on the pair of proofs passed
-func MerkleTransitionFromProofPair(before, after ArboProof) MerkleTransition {
+// MerkleTransitionFromArboProofPair generates a MerkleTransition based on the pair of proofs passed
+func MerkleTransitionFromArboProofPair(before, after ArboProof) MerkleTransition {
 	//	Fnction
 	//	fnc[0]  fnc[1]
 	//	0       0       NOP
@@ -90,30 +88,6 @@ func MerkleTransitionFromProofPair(before, after ArboProof) MerkleTransition {
 	}
 }
 
-func (o *Operator) GenArboProof(k []byte) (ArboProof, error) {
-	root, err := o.ArboState.Root()
-	if err != nil {
-		return ArboProof{}, err
-	}
-	leafK, leafV, packedSiblings, existence, err := o.ArboState.GenProof(k)
-	if err != nil {
-		return ArboProof{}, err
-	}
-	unpackedSiblings, err := arbo.UnpackSiblings(arbo.HashFunctionPoseidon, packedSiblings)
-	if err != nil {
-		return ArboProof{}, err
-	}
-	fmt.Println("existence?", existence, leafK, leafV)
-
-	return ArboProof{
-		Root:      root,
-		Siblings:  unpackedSiblings,
-		Key:       leafK,
-		Value:     leafV,
-		Existence: existence,
-	}, nil
-}
-
 func MerkleProofFromArboProof(p ArboProof) MerkleProof {
 	fnc := 0 // inclusion
 	if !p.Existence {
@@ -140,6 +114,28 @@ func padSiblings(unpackedSiblings [][]byte) [depth]frontend.Variable {
 	return paddedSiblings
 }
 
+func (o *Operator) GenArboProof(k []byte) (ArboProof, error) {
+	root, err := o.ArboState.Root()
+	if err != nil {
+		return ArboProof{}, err
+	}
+	leafK, leafV, packedSiblings, existence, err := o.ArboState.GenProof(k)
+	if err != nil {
+		return ArboProof{}, err
+	}
+	unpackedSiblings, err := arbo.UnpackSiblings(arbo.HashFunctionPoseidon, packedSiblings)
+	if err != nil {
+		return ArboProof{}, err
+	}
+	return ArboProof{
+		Root:      root,
+		Siblings:  unpackedSiblings,
+		Key:       leafK,
+		Value:     leafV,
+		Existence: existence,
+	}, nil
+}
+
 // VerifyProof takes a Merkle root, a proofSet, and a proofIndex and returns
 // true if the first element of the proof set is a leaf of data in the Merkle
 // root. False is returned if the proof set or Merkle root is nil, and if
@@ -148,15 +144,11 @@ func (mp *MerkleProof) VerifyProof(api frontend.API, h garbo.Hash) {
 	garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
 }
 
-func (mp *MerkleTransition) VerifyProof(api frontend.API, h garbo.Hash) {
-	garbo.CheckInclusionProof(api, h, mp.NewKey, mp.NewValue, mp.NewRoot, mp.Siblings[:])
-}
-
 // VerifyProof takes a Merkle root, a proofSet, and a proofIndex and returns
 // true if the first element of the proof set is a leaf of data in the Merkle
 // root. False is returned if the proof set or Merkle root is nil, and if
 // 'numLeaves' equals 0.
-func (mp *MerkleTransition) VerifyProofPair(api frontend.API, h garbo.Hash) {
+func (mp *MerkleTransition) Verify(api frontend.API, h garbo.Hash) {
 	api.Println("old key, value, root, isold0 = ", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.IsOld0)
 	api.Println("new key, value, root, fnc0,1 = ", mp.NewKey, mp.NewValue, toHex(mp.NewRoot), mp.Fnc0, mp.Fnc1)
 	for i := range mp.Siblings {
@@ -179,6 +171,3 @@ func (mp *MerkleTransition) VerifyProofPair(api frontend.API, h garbo.Hash) {
 
 	api.Println("proved transition", toHex(mp.OldRoot), "->", toHex(mp.NewRoot))
 }
-
-// TODO: use arbo.Hash
-type arboHash *poseidon.Poseidon

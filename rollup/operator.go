@@ -159,7 +159,7 @@ func (o *Operator) mockProofs() error {
 	if err != nil {
 		return err
 	}
-	mockProofPair := MerkleTransitionFromProofPair(mockProof, mockProof)
+	mockProofPair := MerkleTransitionFromArboProofPair(mockProof, mockProof)
 	o.Witnesses.MerkleProofs.ResultsAdd = mockProofPair
 	o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
 	// for i := range o.Witnesses.MerkleProofs.Address {
@@ -258,7 +258,7 @@ func (o *Operator) updateState(t Vote) error {
 		}
 		fmt.Printf("%+v\n", mpBefore)
 		fmt.Printf("%+v\n", mpAfter)
-		o.Witnesses.MerkleProofs.ResultsAdd = MerkleTransitionFromProofPair(mpBefore, mpAfter)
+		o.Witnesses.MerkleProofs.ResultsAdd = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
 	}
 	// add key 5
 	{
@@ -268,7 +268,7 @@ func (o *Operator) updateState(t Vote) error {
 		}
 		fmt.Printf("%+v\n", mpBefore)
 		fmt.Printf("%+v\n", mpAfter)
-		o.Witnesses.MerkleProofs.ResultsSub = MerkleTransitionFromProofPair(mpBefore, mpAfter)
+		o.Witnesses.MerkleProofs.ResultsSub = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
 	}
 	// RootHashAfter
 	{

@@ -104,8 +104,18 @@ func (circuit Circuit) Define(api frontend.API) error {
 	if err := circuit.PostInit(api); err != nil {
 		return err
 	}
-	// hash function for the merkle proof and the eddsa signature
-	verifyAggregatedZKProof(api)
+
+	packedInput := packInputs(
+	// circuit.MerkleProofs.ProcessID,
+	// circuit.MerkleProofs.CensusRoot,
+	// circuit.MerkleProofs.BallotMode,
+	// circuit.MerkleProofs.EncryptionKey,
+	// circuit.MerkleProofs.Nullifiers,
+	// circuit.MerkleProofs.Commitments,
+	// circuit.MerkleProofs.Addresses,
+	// circuit.MerkleProofs.EncryptedBallots,
+	)
+	verifyAggregatedZKProof(api, circuit.AggregatedProof, packedInput)
 	verifyMerkleProofs(api, poseidon.Hash,
 		circuit.RootHashBefore,
 		circuit.RootHashAfter,
@@ -121,7 +131,11 @@ func (circuit Circuit) Define(api frontend.API) error {
 	return nil
 }
 
-func verifyAggregatedZKProof(api frontend.API) {
+func packInputs(mps ...MerkleProof) frontend.Variable {
+	return 1
+}
+
+func verifyAggregatedZKProof(api frontend.API, aggrProof, packedInput frontend.Variable) {
 	api.AssertIsEqual(1, 1) // TODO: mock, should actually verify Aggregated ZKProof
 }
 
@@ -167,7 +181,7 @@ func verifyMerkleProof(api frontend.API, hFunc arbo.Hash, root frontend.Variable
 func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, oldRoot frontend.Variable, mp MerkleTransition) frontend.Variable {
 	api.Println("will verify merkle transition from root", toHex(mp.OldRoot), "->", toHex(mp.NewRoot))
 	api.AssertIsEqual(oldRoot, mp.OldRoot)
-	mp.VerifyProofPair(api, hFunc)
+	mp.Verify(api, hFunc)
 	return mp.NewRoot
 }
 
