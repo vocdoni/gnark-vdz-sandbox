@@ -155,13 +155,13 @@ func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, 
 }
 
 func (o *Operator) mockProofs() error {
-	mockProof, err := o.GenMerkleProofFromArbo([]byte{0xff})
+	mockProof, err := o.GenArboProof([]byte{0xff})
 	if err != nil {
 		return err
 	}
-	mockProofPair := o.MerkleTransitionFromProofPair(mockProof, mockProof)
+	mockProofPair := MerkleTransitionFromProofPair(mockProof, mockProof)
 	o.Witnesses.MerkleProofs.ResultsAdd = mockProofPair
-	// o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
+	o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
 	// for i := range o.Witnesses.MerkleProofs.Address {
 	// 	o.Witnesses.MerkleProofs.Address[i] = mockProofPair
 	// }
@@ -192,7 +192,7 @@ func toHex(v frontend.Variable) string {
 
 func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	fmt.Println("\nwill add key", "k=", k, "v=", v)
-	mpBefore, err := o.GenMerkleProofFromArbo(k)
+	mpBefore, err := o.GenArboProof(k)
 	if err != nil {
 		return ArboProof{}, ArboProof{}, err
 	}
@@ -205,7 +205,7 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 		return ArboProof{}, ArboProof{}, err
 	}
 
-	mpAfter, err := o.GenMerkleProofFromArbo(k)
+	mpAfter, err := o.GenArboProof(k)
 	if err != nil {
 		return ArboProof{}, ArboProof{}, err
 	}
@@ -223,7 +223,7 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 		if err := o.ArboState.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {
 			return ArboProof{}, ArboProof{}, err
 		}
-		mpAfter, err := o.GenMerkleProofFromArbo(k)
+		mpAfter, err := o.GenArboProof(k)
 		if err != nil {
 			return ArboProof{}, ArboProof{}, err
 		}
@@ -250,7 +250,7 @@ func (o *Operator) updateState(t Vote) error {
 		o.Witnesses.RootHashBefore = arbo.BytesLEToBigInt(root)
 	}
 
-	// add key 4
+	// add key 3
 	{
 		mpBefore, mpAfter, err := o.addKey([]byte{0x03}, []byte{0x00})
 		if err != nil {
@@ -258,40 +258,18 @@ func (o *Operator) updateState(t Vote) error {
 		}
 		fmt.Printf("%+v\n", mpBefore)
 		fmt.Printf("%+v\n", mpAfter)
-		o.Witnesses.MerkleProofs.ResultsAdd = o.MerkleTransitionFromProofPair(mpBefore, mpAfter)
-		// o.Witnesses.MerkleProofs.ResultsAdd.OldRoot = arbo.BytesLEToBigInt(root)
-		// fmt.Printf("%+v\n", o.Witnesses.MerkleProofs.ResultsAdd)
-
-		// o.Witnesses.MerkleProofs.ResultsAdd.Siblings = mpBefore.Siblings
-
-		// o.Witnesses.MerkleProofs.ResultsAdd.IsOld0 = mpBefore.IsOld0
-		// o.Witnesses.MerkleProofs.ResultsAdd.OldFnc = mpBefore.Fnc
-		// o.Witnesses.MerkleProofs.ResultsAdd.OldKey = mpBefore.Key
-		// o.Witnesses.MerkleProofs.ResultsAdd.OldValue = mpBefore.Value
-
+		o.Witnesses.MerkleProofs.ResultsAdd = MerkleTransitionFromProofPair(mpBefore, mpAfter)
 	}
-	// // add key 5
-	// {
-	// 	root, err := o.ArboState.Root()
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	mpBefore, mpAfter, err := o.addKey([]byte{0x05}, []byte{0x00})
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	o.Witnesses.MerkleProofs.ResultsSub, err = o.GenMerkleTransitionFromArbo([]byte{0x05})
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	o.Witnesses.MerkleProofs.ResultsSub.OldRoot = arbo.BytesLEToBigInt(root)
-
-	// 	if mpBefore.Fnc == 1 && mpAfter.Fnc == 0 {
-	// 		o.Witnesses.MerkleProofs.ResultsSub.Fnc = 1
-	// 	}
-	// }
+	// add key 5
+	{
+		mpBefore, mpAfter, err := o.addKey([]byte{0x05}, []byte{0x00})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%+v\n", mpBefore)
+		fmt.Printf("%+v\n", mpAfter)
+		o.Witnesses.MerkleProofs.ResultsSub = MerkleTransitionFromProofPair(mpBefore, mpAfter)
+	}
 	// RootHashAfter
 	{
 		root, err := o.ArboState.Root()

@@ -50,7 +50,7 @@ type MerkleTransition struct {
 }
 
 // MerkleTransitionFromProofPair generates a MerkleTransition based on the pair of proofs passed
-func (o *Operator) MerkleTransitionFromProofPair(before, after ArboProof) MerkleTransition {
+func MerkleTransitionFromProofPair(before, after ArboProof) MerkleTransition {
 	//	Fnction
 	//	fnc[0]  fnc[1]
 	//	0       0       NOP
@@ -77,20 +77,20 @@ func (o *Operator) MerkleTransitionFromProofPair(before, after ArboProof) Merkle
 	mpBefore := MerkleProofFromArboProof(before)
 	mpAfter := MerkleProofFromArboProof(after)
 	return MerkleTransition{
-		Root:     mpAfter.Root,
-		Siblings: mpAfter.Siblings,
-		Key:      mpAfter.Key,
-		Value:    mpAfter.Value,
+		Siblings: mpBefore.Siblings,
 		OldRoot:  mpBefore.Root,
 		OldKey:   mpBefore.Key,
 		OldValue: mpBefore.Value,
+		Root:     mpAfter.Root,
+		Key:      mpAfter.Key,
+		Value:    mpAfter.Value,
 		IsOld0:   isOld0,
 		Fnc0:     fnc0,
 		Fnc1:     fnc1,
 	}
 }
 
-func (o *Operator) GenMerkleProofFromArbo(k []byte) (ArboProof, error) {
+func (o *Operator) GenArboProof(k []byte) (ArboProof, error) {
 	root, err := o.ArboState.Root()
 	if err != nil {
 		return ArboProof{}, err

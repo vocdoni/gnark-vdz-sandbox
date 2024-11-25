@@ -69,7 +69,7 @@ type MerkleProofs struct {
 	// BallotMode    MerkleProof
 	// EncryptionKey MerkleProof
 	ResultsAdd MerkleTransition
-	// ResultsSub MerkleTransition
+	ResultsSub MerkleTransition
 	// Nullifier     [VoteBatchSize]MerkleTransition
 	// Commitment    [VoteBatchSize]MerkleTransition
 	// Address       [VoteBatchSize]MerkleTransition
@@ -135,8 +135,8 @@ func verifyMerkleProofs(api frontend.API, hFunc arbo.Hash, rootBefore, rootAfter
 	root := rootBefore
 	api.Println("root is rootBefore, i.e.", root, "=", toHex(root))
 	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsAdd)
-	// api.Println("now root is", root, "=", toHex(root))
-	// root = verifyMerkleTransition(api, hFunc, root, mps.ResultsSub)
+	api.Println("now root is", root, "=", toHex(root))
+	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsSub)
 	api.Println("and now root is", root, "=", toHex(root), "should be equal to rootAfter", toHex(root))
 	// for i := range mps.Nullifier {
 	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Nullifier[i])
