@@ -159,18 +159,7 @@ func (o *Operator) mockProofs() error {
 	if err != nil {
 		return err
 	}
-	mockProofPair := MerkleProofPair{
-		Root:     mockProof.Root,
-		Siblings: mockProof.Siblings,
-		Key:      mockProof.Key,
-		Value:    mockProof.Value,
-		IsOld0:   0,
-		Fnc:      mockProof.Fnc,
-		OldRoot:  mockProof.Root,
-		OldKey:   mockProof.Key,
-		OldValue: mockProof.Value,
-		OldFnc:   mockProof.Fnc,
-	}
+	mockProofPair := o.MerkleTransitionFromProofPair(mockProof, mockProof)
 	o.Witnesses.MerkleProofs.ResultsAdd = mockProofPair
 	// o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
 	// for i := range o.Witnesses.MerkleProofs.Address {
@@ -201,24 +190,24 @@ func toHex(v frontend.Variable) string {
 	}
 }
 
-func (o *Operator) addKey(k []byte, v []byte) (MerkleProof, MerkleProof, error) {
+func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	fmt.Println("\nwill add key", "k=", k, "v=", v)
 	mpBefore, err := o.GenMerkleProofFromArbo(k)
 	if err != nil {
-		return MerkleProof{}, MerkleProof{}, err
+		return ArboProof{}, ArboProof{}, err
 	}
 	fmt.Println("before:", "root=", toHex(mpBefore.Root), "k=", mpBefore.Key, "v=", mpBefore.Value,
-		"isOld0=", mpBefore.IsOld0, "fnc=", mpBefore.Fnc)
+		"existence=", mpBefore.Existence)
 	for i := range mpBefore.Siblings {
 		fmt.Println("siblings=", toHex(mpBefore.Siblings[i]))
 	}
 	if err := o.ArboState.Add(k, v); err != nil {
-		return MerkleProof{}, MerkleProof{}, err
+		return ArboProof{}, ArboProof{}, err
 	}
 
 	mpAfter, err := o.GenMerkleProofFromArbo(k)
 	if err != nil {
-		return MerkleProof{}, MerkleProof{}, err
+		return ArboProof{}, ArboProof{}, err
 	}
 	fmt.Println("after: ", "root=", toHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
 	for i := range mpAfter.Siblings {
@@ -232,11 +221,11 @@ func (o *Operator) addKey(k []byte, v []byte) (MerkleProof, MerkleProof, error) 
 		fmt.Printf("\n ...now hack key 0x00=%v and regenerate proof for key 0x04\n", v)
 
 		if err := o.ArboState.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {
-			return MerkleProof{}, MerkleProof{}, err
+			return ArboProof{}, ArboProof{}, err
 		}
 		mpAfter, err := o.GenMerkleProofFromArbo(k)
 		if err != nil {
-			return MerkleProof{}, MerkleProof{}, err
+			return ArboProof{}, ArboProof{}, err
 		}
 		fmt.Println("hacked:", "root=", toHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
 		for i := range mpAfter.Siblings {
@@ -263,30 +252,22 @@ func (o *Operator) updateState(t Vote) error {
 
 	// add key 4
 	{
-		root, err := o.ArboState.Root()
-		if err != nil {
-			return err
-		}
-
 		mpBefore, mpAfter, err := o.addKey([]byte{0x03}, []byte{0x00})
 		if err != nil {
 			return err
 		}
 		fmt.Printf("%+v\n", mpBefore)
 		fmt.Printf("%+v\n", mpAfter)
-		o.Witnesses.MerkleProofs.ResultsAdd, err = o.GenMerkleProofPairFromArbo([]byte{0x03})
-		if err != nil {
-			return err
-		}
-		o.Witnesses.MerkleProofs.ResultsAdd.OldRoot = arbo.BytesLEToBigInt(root)
-		fmt.Printf("%+v\n", o.Witnesses.MerkleProofs.ResultsAdd)
+		o.Witnesses.MerkleProofs.ResultsAdd = o.MerkleTransitionFromProofPair(mpBefore, mpAfter)
+		// o.Witnesses.MerkleProofs.ResultsAdd.OldRoot = arbo.BytesLEToBigInt(root)
+		// fmt.Printf("%+v\n", o.Witnesses.MerkleProofs.ResultsAdd)
 
-		o.Witnesses.MerkleProofs.ResultsAdd.Siblings = mpBefore.Siblings
+		// o.Witnesses.MerkleProofs.ResultsAdd.Siblings = mpBefore.Siblings
 
-		o.Witnesses.MerkleProofs.ResultsAdd.IsOld0 = mpBefore.IsOld0
-		o.Witnesses.MerkleProofs.ResultsAdd.OldFnc = mpBefore.Fnc
-		o.Witnesses.MerkleProofs.ResultsAdd.OldKey = mpBefore.Key
-		o.Witnesses.MerkleProofs.ResultsAdd.OldValue = mpBefore.Value
+		// o.Witnesses.MerkleProofs.ResultsAdd.IsOld0 = mpBefore.IsOld0
+		// o.Witnesses.MerkleProofs.ResultsAdd.OldFnc = mpBefore.Fnc
+		// o.Witnesses.MerkleProofs.ResultsAdd.OldKey = mpBefore.Key
+		// o.Witnesses.MerkleProofs.ResultsAdd.OldValue = mpBefore.Value
 
 	}
 	// // add key 5
@@ -301,7 +282,7 @@ func (o *Operator) updateState(t Vote) error {
 	// 		return err
 	// 	}
 
-	// 	o.Witnesses.MerkleProofs.ResultsSub, err = o.GenMerkleProofPairFromArbo([]byte{0x05})
+	// 	o.Witnesses.MerkleProofs.ResultsSub, err = o.GenMerkleTransitionFromArbo([]byte{0x05})
 	// 	if err != nil {
 	// 		return err
 	// 	}

@@ -68,12 +68,12 @@ type MerkleProofs struct {
 	// CensusRoot    MerkleProof
 	// BallotMode    MerkleProof
 	// EncryptionKey MerkleProof
-	ResultsAdd MerkleProofPair
-	// ResultsSub MerkleProofPair
-	// Nullifier     [VoteBatchSize]MerkleProofPair
-	// Commitment    [VoteBatchSize]MerkleProofPair
-	// Address       [VoteBatchSize]MerkleProofPair
-	// Ballot        [VoteBatchSize]MerkleProofPair
+	ResultsAdd MerkleTransition
+	// ResultsSub MerkleTransition
+	// Nullifier     [VoteBatchSize]MerkleTransition
+	// Commitment    [VoteBatchSize]MerkleTransition
+	// Address       [VoteBatchSize]MerkleTransition
+	// Ballot        [VoteBatchSize]MerkleTransition
 }
 
 func (circuit *Circuit) PostInit(api frontend.API) error {
@@ -158,13 +158,13 @@ func verifyMerkleProof(api frontend.API, hFunc arbo.Hash, root frontend.Variable
 	mp.VerifyProof(api, hFunc)
 }
 
-// verifyMerkleTransition asserts a MerkleProofPair is valid
+// verifyMerkleTransition asserts a MerkleTransition is valid
 //   - mp.RootHash matches passed root
 //   - mp.Leaf belongs to mp.RootHash
 //   - mp.NewLeaf belongs to mp.NewRootHash
 //
 // and returns mp.NewRootHash
-func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, root frontend.Variable, mp MerkleProofPair) frontend.Variable {
+func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, root frontend.Variable, mp MerkleTransition) frontend.Variable {
 	api.Println("will verify merkle transition from root", toHex(mp.OldRoot), "->", toHex(mp.Root))
 	api.AssertIsEqual(root, mp.OldRoot)
 	mp.VerifyProofPair(api, hFunc)
@@ -178,7 +178,7 @@ func verifyResults(api frontend.API, sum, resultsAddBefore, resultsAddAfter fron
 }
 
 // verifyOverwrites is not planned for PoC v1.0
-func verifyOverwrites(api frontend.API, ballots [VoteBatchSize]MerkleProofPair, resultsSubBefore, resultsSubAfter frontend.Variable,
+func verifyOverwrites(api frontend.API, ballots [VoteBatchSize]MerkleTransition, resultsSubBefore, resultsSubAfter frontend.Variable,
 ) {
 	// TODO: mock, sum should be elGamal arithmetic
 	// api.AssertIsEqual(api.Add(resultsSubBefore, ballots), resultsSubAfter)

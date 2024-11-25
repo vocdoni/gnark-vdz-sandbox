@@ -12,6 +12,16 @@ import (
 	"go.vocdoni.io/dvote/tree/arbo"
 )
 
+// ArboProof stores the proof in arbo native types
+type ArboProof struct {
+	// Key+Value hashed through Siblings path, should produce Root hash
+	Root      []byte
+	Siblings  [][]byte
+	Key       []byte
+	Value     []byte
+	Existence bool
+}
+
 // MerkleProof stores the leaf, the path, and the root hash.
 type MerkleProof struct {
 	// Key+Value hashed through Siblings path, should produce Root hash
@@ -19,112 +29,103 @@ type MerkleProof struct {
 	Siblings [depth]frontend.Variable
 	Key      frontend.Variable
 	Value    frontend.Variable
-
-	IsOld0 frontend.Variable
-	Fnc    frontend.Variable // 0: inclusion, 1: non inclusion
+	Fnc      frontend.Variable // 0: inclusion, 1: non inclusion
 }
 
-// MerkleProofPair stores a pair of leaves and root hashes, and a single path common to both proofs
-type MerkleProofPair struct {
+// MerkleTransition stores a pair of leaves and root hashes, and a single path common to both proofs
+type MerkleTransition struct {
 	// Key+Value hashed through Siblings path, should produce Root hash
 	Root     frontend.Variable
 	Siblings [depth]frontend.Variable
 	Key      frontend.Variable
 	Value    frontend.Variable
 
-	IsOld0 frontend.Variable
-	Fnc    frontend.Variable // 0: inclusion, 1: non inclusion
 	// OldKey+OldValue hashed through same Siblings should produce OldRoot hash
 	OldRoot  frontend.Variable
 	OldKey   frontend.Variable
 	OldValue frontend.Variable
-	OldFnc   frontend.Variable
+	IsOld0   frontend.Variable
+	Fnc0     frontend.Variable
+	Fnc1     frontend.Variable
 }
 
-// GenMerkleProofPairFromArbo generates a MerkleProof for a given key
-// in the Tree
-func (o *Operator) GenMerkleProofPairFromArbo(k []byte) (MerkleProofPair, error) {
-	kAux, v, siblings, existence, err := o.ArboState.GenProof(k)
-	if err != nil {
-		return MerkleProofPair{}, err
-	}
-	fmt.Println("existence?", existence, kAux, v)
-
-	var cp MerkleProofPair
-	root, err := o.ArboState.Root()
-	if err != nil {
-		return MerkleProofPair{}, err
-	}
-	cp.Root = arbo.BytesLEToBigInt(root)
-	unpackedSiblings, err := arbo.UnpackSiblings(arbo.HashFunctionPoseidon, siblings)
-	if err != nil {
-		return MerkleProofPair{}, err
-	}
-	cp.Siblings = padSiblings(unpackedSiblings)
-	if !existence {
-		cp.OldKey = arbo.BytesLEToBigInt(kAux)
-		cp.OldValue = arbo.BytesLEToBigInt(v)
-	} else {
-		cp.OldKey = frontend.Variable(0)
-		cp.OldValue = frontend.Variable(0)
-	}
-	cp.Key = arbo.BytesLEToBigInt(k)
-	cp.Value = arbo.BytesLEToBigInt(v)
-	if existence {
-		cp.Fnc = 0 // inclusion
-	} else {
-		cp.Fnc = 1 // non inclusion
-	}
-
-	cp.IsOld0 = 0
-	if !existence && bytes.Equal(kAux, []byte{0x00}) && bytes.Equal(v, []byte{0x00}) {
-		cp.IsOld0 = 1
-	}
-
-	cp.OldFnc = 0
-
-	return cp, nil
-}
-
-func (o *Operator) GenMerkleProofFromArbo(k []byte) (MerkleProof, error) {
-	root, err := o.ArboState.Root()
-	if err != nil {
-		return MerkleProof{}, err
-	}
-	leafK, leafV, siblings, exists, err := o.ArboState.GenProof(k)
-	if err != nil {
-		return MerkleProof{}, err
-	}
-	return NewMerkleProofFromArbo(root, leafK, leafV, siblings, exists)
-}
-
-func NewMerkleProofFromArbo(root, leafK, leafV, packedSiblings []byte, exists bool) (MerkleProof, error) {
-	unpackedSiblings, err := arbo.UnpackSiblings(arbo.HashFunctionPoseidon, packedSiblings)
-	if err != nil {
-		return MerkleProof{}, err
-	}
-	fmt.Println("existence?", exists, leafK, leafV)
-
-	fnc := int(0) // inclusion
-	if !exists {
-		fnc = 1 // non-inclusion
+// MerkleTransitionFromProofPair generates a MerkleTransition based on the pair of proofs passed
+func (o *Operator) MerkleTransitionFromProofPair(before, after ArboProof) MerkleTransition {
+	//	Fnction
+	//	fnc[0]  fnc[1]
+	//	0       0       NOP
+	//	0       1       UPDATE
+	//	1       0       INSERT
+	//	1       1       DELETE
+	fnc0, fnc1 := 0, 0
+	switch {
+	case !before.Existence && !after.Existence: // exclusion, exclusion = NOOP
+		fnc0, fnc1 = 0, 0
+	case before.Existence && after.Existence: // inclusion, inclusion = UPDATE
+		fnc0, fnc1 = 0, 1
+	case !before.Existence && after.Existence: // exclusion, inclusion = INSERT
+		fnc0, fnc1 = 1, 0
+	case before.Existence && !after.Existence: // inclusion, exclusion = DELETE
+		fnc0, fnc1 = 1, 1
 	}
 
 	isOld0 := 0
-	if !exists && bytes.Equal(leafK, []byte{}) && bytes.Equal(leafV, []byte{}) {
+	if bytes.Equal(before.Key, []byte{}) && bytes.Equal(before.Value, []byte{}) {
 		isOld0 = 1
 	}
 
-	return MerkleProof{
-		Root:     arbo.BytesLEToBigInt(root),
-		Siblings: padSiblings(unpackedSiblings),
+	mpBefore := MerkleProofFromArboProof(before)
+	mpAfter := MerkleProofFromArboProof(after)
+	return MerkleTransition{
+		Root:     mpAfter.Root,
+		Siblings: mpAfter.Siblings,
+		Key:      mpAfter.Key,
+		Value:    mpAfter.Value,
+		OldRoot:  mpBefore.Root,
+		OldKey:   mpBefore.Key,
+		OldValue: mpBefore.Value,
+		IsOld0:   isOld0,
+		Fnc0:     fnc0,
+		Fnc1:     fnc1,
+	}
+}
 
-		Key:   arbo.BytesLEToBigInt(leafK),
-		Value: arbo.BytesLEToBigInt(leafV),
+func (o *Operator) GenMerkleProofFromArbo(k []byte) (ArboProof, error) {
+	root, err := o.ArboState.Root()
+	if err != nil {
+		return ArboProof{}, err
+	}
+	leafK, leafV, packedSiblings, existence, err := o.ArboState.GenProof(k)
+	if err != nil {
+		return ArboProof{}, err
+	}
+	unpackedSiblings, err := arbo.UnpackSiblings(arbo.HashFunctionPoseidon, packedSiblings)
+	if err != nil {
+		return ArboProof{}, err
+	}
+	fmt.Println("existence?", existence, leafK, leafV)
 
-		Fnc:    fnc,
-		IsOld0: isOld0,
+	return ArboProof{
+		Root:      root,
+		Siblings:  unpackedSiblings,
+		Key:       leafK,
+		Value:     leafV,
+		Existence: existence,
 	}, nil
+}
+
+func MerkleProofFromArboProof(p ArboProof) MerkleProof {
+	fnc := 0 // inclusion
+	if !p.Existence {
+		fnc = 1 // non-inclusion
+	}
+	return MerkleProof{
+		Root:     arbo.BytesLEToBigInt(p.Root),
+		Siblings: padSiblings(p.Siblings),
+		Key:      arbo.BytesLEToBigInt(p.Key),
+		Value:    arbo.BytesLEToBigInt(p.Value),
+		Fnc:      fnc,
+	}
 }
 
 func padSiblings(unpackedSiblings [][]byte) [depth]frontend.Variable {
@@ -147,7 +148,7 @@ func (mp *MerkleProof) VerifyProof(api frontend.API, h garbo.Hash) {
 	garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
 }
 
-func (mp *MerkleProofPair) VerifyProof(api frontend.API, h garbo.Hash) {
+func (mp *MerkleTransition) VerifyProof(api frontend.API, h garbo.Hash) {
 	garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
 }
 
@@ -155,18 +156,18 @@ func (mp *MerkleProofPair) VerifyProof(api frontend.API, h garbo.Hash) {
 // true if the first element of the proof set is a leaf of data in the Merkle
 // root. False is returned if the proof set or Merkle root is nil, and if
 // 'numLeaves' equals 0.
-func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h garbo.Hash) {
-	if mp.OldFnc == 1 && mp.Fnc == 0 {
-		api.Println("pair of proofs is adding a leaf, should first check exclusion and then inclusion")
+func (mp *MerkleTransition) VerifyProofPair(api frontend.API, h garbo.Hash) {
+	if mp.Fnc0 == 1 && mp.Fnc1 == 0 {
+		api.Println("pair of proofs is adding a leaf")
 	}
-	if mp.OldFnc == 0 && mp.Fnc == 0 {
-		api.Println("pair of proofs is updating a leaf, should check both inclusions")
+	if mp.Fnc0 == 0 && mp.Fnc1 == 1 {
+		api.Println("pair of proofs is updating a leaf")
 	}
-	if mp.OldFnc == 0 && mp.Fnc == 1 {
-		api.Println("pair of proofs is removing a leaf, should check inclusion and then exclusion")
+	if mp.Fnc0 == 1 && mp.Fnc1 == 1 {
+		api.Println("pair of proofs is removing a leaf")
 	}
-	api.Println("key, value, root", mp.Key, mp.Value, toHex(mp.Root), mp.Fnc)
-	api.Println("oky, ovlue, orot", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.OldFnc, mp.IsOld0)
+	api.Println("key, value, root, fnc0,1", mp.Key, mp.Value, toHex(mp.Root), mp.Fnc0, mp.Fnc1)
+	api.Println("oky, ovlue, orot, isold0", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.IsOld0)
 	for i := range mp.Siblings {
 		api.Println("sib", toHex(mp.Siblings[i]))
 	}
@@ -190,8 +191,8 @@ func (mp *MerkleProofPair) VerifyProofPair(api frontend.API, h garbo.Hash) {
 		mp.IsOld0,
 		mp.Key,
 		mp.Value,
-		mp.OldFnc,
-		mp.Fnc,
+		mp.Fnc0,
+		mp.Fnc1,
 	)
 
 	api.AssertIsEqual(root, mp.Root)
