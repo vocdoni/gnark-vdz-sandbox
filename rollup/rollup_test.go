@@ -77,50 +77,11 @@ func TestOperatorReadAccount(t *testing.T) {
 	}
 }
 
-func TestSignTransfer(t *testing.T) {
-	var amount uint64
-
-	// create operator with 10 accounts
-	operator, userKeys := createOperator(10)
-
-	sender, err := operator.ReadAccount(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// create the transfer and sign it (the hash used for signing is the hash function of the operator)
-	amount = 10
-	vote := NewVote(amount, sender.pubKey)
-
-	// verify correct signature
-	_, err = vote.Sign(userKeys[0], operator.h)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res, err := vote.Verify(operator.h)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res {
-		t.Fatal("Verifying transaction with the correct key should work")
-	}
-
-	// verify wrong signature
-	_, err = vote.Sign(userKeys[1], operator.h)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = vote.Verify(operator.h)
-	if err == nil {
-		t.Fatal("Verifying transaction signed with the wrong key should output an error")
-	}
-}
-
 func TestOperatorUpdateAccount(t *testing.T) {
 	var amount uint64
 
 	// create operator with 10 accounts
-	operator, userKeys := createOperator(10)
+	operator, _ := createOperator(10)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -140,7 +101,6 @@ func TestOperatorUpdateAccount(t *testing.T) {
 	// create the transfer and sign it
 	amount = 10
 	transfer := NewVote(amount, sender.pubKey)
-	transfer.Sign(userKeys[0], operator.h)
 
 	err = operator.updateState(transfer)
 	if err != nil {

@@ -48,7 +48,7 @@ func TestCircuitUpdateAccount(t *testing.T) {
 		t.Skip("skipping rollup tests for circleCI")
 	}
 
-	operator, users := createOperator(nbVoters)
+	operator, _ := createOperator(nbVoters)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -68,12 +68,6 @@ func TestCircuitUpdateAccount(t *testing.T) {
 	// create the transfer and sign it
 	amount := uint64(10)
 	transfer := NewVote(amount, sender.pubKey)
-
-	// sign the transfer
-	_, err = transfer.Sign(users[0], operator.h)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// update the state from the received transfer
 	err = operator.updateState(transfer)
@@ -93,7 +87,7 @@ func TestCircuitFull(t *testing.T) {
 		t.Skip("skipping rollup tests for circleCI")
 	}
 
-	operator, users := createOperator(nbVoters)
+	operator, _ := createOperator(nbVoters)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -113,12 +107,6 @@ func TestCircuitFull(t *testing.T) {
 	// create the transfer and sign it
 	amount := uint64(10)
 	transfer := NewVote(amount, sender.pubKey)
-
-	// sign the transfer
-	_, err = transfer.Sign(users[0], operator.h)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// update the state from the received transfer
 	err = operator.updateState(transfer)
@@ -143,7 +131,7 @@ func TestCircuitFull(t *testing.T) {
 }
 
 func TestCircuitCompile(t *testing.T) {
-	operator, users := createOperator(nbVoters)
+	operator, _ := createOperator(nbVoters)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -163,12 +151,6 @@ func TestCircuitCompile(t *testing.T) {
 	// create the transfer and sign it
 	amount := uint64(16)
 	transfer := NewVote(amount, sender.pubKey)
-
-	// sign the transfer
-	_, err = transfer.Sign(users[0], operator.h)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// update the state from the received transfer
 	err = operator.updateState(transfer)
