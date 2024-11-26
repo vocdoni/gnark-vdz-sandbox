@@ -38,7 +38,7 @@ type circuitUpdateAccount Circuit
 // Circuit implements part of the rollup circuit only by declaring a subset of the constraints
 func (t *circuitUpdateAccount) Define(api frontend.API) error {
 	verifyResults(api, t.BallotSum,
-		t.MerkleProofs.ResultsAdd.NewValue, t.MerkleProofs.ResultsAdd.OldValue,
+		t.MerkleProofs.ResultsAdd.OldValue, t.MerkleProofs.ResultsAdd.NewValue,
 	)
 	return nil
 }

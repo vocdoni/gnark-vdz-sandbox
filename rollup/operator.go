@@ -19,6 +19,7 @@ package rollup
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"math/big"
@@ -100,20 +101,21 @@ func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, 
 	if _, _, err := o.addKey([]byte{0x00}, processID); err != nil {
 		return err
 	}
-	// if _, _, err := o.addKey([]byte{0x01}, censusRoot); err != nil {
-	// 	return err
-	// }
+	if _, _, err := o.addKey([]byte{0x01}, censusRoot); err != nil {
+		return err
+	}
 	if _, _, err := o.addKey([]byte{0x02}, ballotMode); err != nil {
 		return err
 	}
-	// if _, _, err := o.addKey([]byte{0x03}, encryptionKey); err != nil {
-	// 	return err
-	// }
-
-	// // debug: add a leaf far away
-	// if _, _, err := o.addKey([]byte{0x1f}, ballotMode); err != nil {
-	// 	return err
-	// }
+	if _, _, err := o.addKey([]byte{0x03}, encryptionKey); err != nil {
+		return err
+	}
+	if _, _, err := o.addKey([]byte{0x04}, []byte{0x00}); err != nil { // ResultsAdd
+		return err
+	}
+	if _, _, err := o.addKey([]byte{0x05}, []byte{0x00}); err != nil { // ResultsSub
+		return err
+	}
 
 	// mock, to avoid nulls
 	o.Witnesses.NumVotes = 0
@@ -185,8 +187,15 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	for i := range mpBefore.Siblings {
 		fmt.Println("siblings=", toHex(mpBefore.Siblings[i]))
 	}
-	if err := o.ArboState.Add(k, v); err != nil {
-		return ArboProof{}, ArboProof{}, err
+	if _, _, err := o.ArboState.Get(k); errors.Is(err, arbo.ErrKeyNotFound) {
+		if err := o.ArboState.Add(k, v); err != nil {
+			return ArboProof{}, ArboProof{}, err
+		}
+	} else {
+		fmt.Println("\nkey exists, update instead", "k=", k, "v=", v)
+		if err := o.ArboState.Update(k, v); err != nil {
+			return ArboProof{}, ArboProof{}, err
+		}
 	}
 
 	mpAfter, err := o.GenArboProof(k)
@@ -234,9 +243,13 @@ func (o *Operator) updateState(t Vote) error {
 		o.Witnesses.RootHashBefore = arbo.BytesLEToBigInt(root)
 	}
 
-	// add key 3
+	mockVote := 15
+
+	o.Witnesses.BallotSum = o.Witnesses.BallotSum.(int) + mockVote
+
+	// update key 4 (ResultsAdd)
 	{
-		mpBefore, mpAfter, err := o.addKey([]byte{0x03}, []byte{0x00})
+		mpBefore, mpAfter, err := o.addKey([]byte{0x04}, []byte{byte(mockVote)})
 		if err != nil {
 			return err
 		}
@@ -244,9 +257,10 @@ func (o *Operator) updateState(t Vote) error {
 		fmt.Printf("%+v\n", mpAfter)
 		o.Witnesses.MerkleProofs.ResultsAdd = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
 	}
-	// add key 5
+
+	// add key 0f (mocking a new nullifier)
 	{
-		mpBefore, mpAfter, err := o.addKey([]byte{0x05}, []byte{0x00})
+		mpBefore, mpAfter, err := o.addKey([]byte{0x0f}, []byte{0xff})
 		if err != nil {
 			return err
 		}
@@ -254,6 +268,7 @@ func (o *Operator) updateState(t Vote) error {
 		fmt.Printf("%+v\n", mpAfter)
 		o.Witnesses.MerkleProofs.ResultsSub = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
 	}
+
 	// RootHashAfter
 	{
 		root, err := o.ArboState.Root()
