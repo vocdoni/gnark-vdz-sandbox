@@ -17,13 +17,14 @@ limitations under the License.
 package rollup
 
 import (
-	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
+	"math/big"
+
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards/eddsa"
 )
 
 // Vote describe a rollup transfer
 type Vote struct {
-	amount       fr.Element
+	amount       big.Int
 	senderPubKey eddsa.PublicKey
 }
 

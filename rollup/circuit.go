@@ -17,6 +17,8 @@ limitations under the License.
 package rollup
 
 import (
+	"math/big"
+
 	"github.com/consensys/gnark/frontend"
 	"github.com/vocdoni/gnark-crypto-primitives/arbo"
 	"github.com/vocdoni/gnark-crypto-primitives/poseidon"
@@ -58,6 +60,7 @@ type Circuit struct {
 	// Addressess    [VoteBatchSize]frontend.Variable --> MerkleProofs.Addresse[i].Leaf
 	// Ballots       [VoteBatchSize]frontend.Variable --> MerkleProofs.Ballot[i].Leaf
 	BallotSum frontend.Variable
+	ballotSum big.Int
 }
 
 // MerkleProofs contains the SMT Witness

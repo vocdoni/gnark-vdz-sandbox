@@ -243,13 +243,13 @@ func (o *Operator) updateState(t Vote) error {
 		o.Witnesses.RootHashBefore = arbo.BytesLEToBigInt(root)
 	}
 
-	mockVote := 15
+	o.Witnesses.ballotSum.Add(&o.Witnesses.ballotSum, &t.amount)
 
-	o.Witnesses.BallotSum = o.Witnesses.BallotSum.(int) + mockVote
+	o.Witnesses.BallotSum = o.Witnesses.ballotSum
 
 	// update key 4 (ResultsAdd)
 	{
-		mpBefore, mpAfter, err := o.addKey([]byte{0x04}, []byte{byte(mockVote)})
+		mpBefore, mpAfter, err := o.addKey([]byte{0x04}, arbo.BigIntToBytesLE(32, &t.amount))
 		if err != nil {
 			return err
 		}

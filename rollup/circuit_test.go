@@ -66,7 +66,7 @@ func TestCircuitUpdateAccount(t *testing.T) {
 	}
 
 	// create the transfer and sign it
-	amount := uint64(10)
+	amount := uint64(20)
 	transfer := NewVote(amount, sender.pubKey)
 
 	// update the state from the received transfer
@@ -80,6 +80,9 @@ func TestCircuitUpdateAccount(t *testing.T) {
 	var updateAccountCircuit circuitUpdateAccount
 
 	assert.ProverSucceeded(&updateAccountCircuit, &operator.Witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
+
+	t.Log("prover succeeded, casted a vote of amount", amount)
+	debugLog(t, operator)
 }
 
 func TestCircuitFull(t *testing.T) {
@@ -202,5 +205,21 @@ func TestCircuitCompile(t *testing.T) {
 
 	if err := groth16.Verify(proof, vk, publicWitness); err != nil {
 		panic(err)
+	}
+}
+
+func debugLog(t *testing.T, operator Operator) {
+	t.Log("public: RootHashBefore", toHex(operator.Witnesses.RootHashBefore))
+	t.Log("public: RootHashAfter", toHex(operator.Witnesses.RootHashAfter))
+	t.Log("public: NumVotes", toHex(operator.Witnesses.NumVotes))
+	t.Log("public: NumOverwrites", toHex(operator.Witnesses.NumOverwrites))
+	t.Log("BallotSum", operator.Witnesses.BallotSum)
+	for name, mt := range map[string]MerkleTransition{
+		"ResultsAdd": operator.Witnesses.MerkleProofs.ResultsAdd,
+		"ResultsSub": operator.Witnesses.MerkleProofs.ResultsSub,
+	} {
+		t.Log(name, "transitioned", "(root", toHex(mt.OldRoot), "->", toHex(mt.NewRoot), ")",
+			"value", mt.OldValue, "->", mt.NewValue,
+		)
 	}
 }

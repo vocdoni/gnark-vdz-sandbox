@@ -99,7 +99,7 @@ func TestOperatorUpdateAccount(t *testing.T) {
 	}
 
 	// create the transfer and sign it
-	amount = 10
+	amount = 15
 	transfer := NewVote(amount, sender.pubKey)
 
 	err = operator.updateState(transfer)
