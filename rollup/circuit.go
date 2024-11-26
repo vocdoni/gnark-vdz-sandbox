@@ -23,13 +23,11 @@ import (
 )
 
 const (
-	nbAccounts    = 16 // 16 accounts so we know that the proof length is 5
+	nbVoters      = 16 // 16 accounts so we know that the proof length is 5
 	depth         = 5  // size fo the inclusion proofs
 	VoteBatchSize = 10 // nbVotes that were processed in AggregatedProof
 )
 
-// Circuit "toy" rollup circuit where an operator can generate a proof that he processed
-// some transactions
 type Circuit struct {
 	// ---------------------------------------------------------------------------------------------
 	// PUBLIC INPUTS
@@ -76,35 +74,8 @@ type MerkleProofs struct {
 	// Ballot        [VoteBatchSize]MerkleTransition
 }
 
-func (circuit *Circuit) PostInit(api frontend.API) error {
-	// allocate the slices for the Merkle proofs
-	// circuit.allocateSlicesMerkleProofs()
-	return nil
-}
-
-func (circuit *Circuit) allocateSlicesMerkleProofs() {
-	// // TODO: is this needed? if depth is a const
-	// circuit.MerkleProofs.ProcessID.Siblings = make([]frontend.Variable, depth)
-	// circuit.MerkleProofs.CensusRoot.Siblings = make([]frontend.Variable, depth)
-	// circuit.MerkleProofs.BallotMode.Siblings = make([]frontend.Variable, depth)
-	// circuit.MerkleProofs.EncryptionKey.Siblings = make([]frontend.Variable, depth)
-	// circuit.MerkleProofs.ResultsAdd.Siblings = make([]frontend.Variable, depth)
-	// circuit.MerkleProofs.ResultsSub.Siblings = make([]frontend.Variable, depth)
-	//
-	//	for j := range VoteBatchSize {
-	//		circuit.MerkleProofs.Address[j].Siblings = make([]frontend.Variable, depth)
-	//		circuit.MerkleProofs.Nullifier[j].Siblings = make([]frontend.Variable, depth)
-	//		circuit.MerkleProofs.Commitment[j].Siblings = make([]frontend.Variable, depth)
-	//		circuit.MerkleProofs.Ballot[j].Siblings = make([]frontend.Variable, depth)
-	//	}
-}
-
 // Define declares the circuit's constraints
 func (circuit Circuit) Define(api frontend.API) error {
-	if err := circuit.PostInit(api); err != nil {
-		return err
-	}
-
 	packedInput := packInputs(
 	// circuit.MerkleProofs.ProcessID,
 	// circuit.MerkleProofs.CensusRoot,

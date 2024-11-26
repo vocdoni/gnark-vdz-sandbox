@@ -51,12 +51,8 @@ func NewQueue(BatchSizeCircuit int) Queue {
 // Operator represents a rollup operator
 type Operator struct {
 	State      []byte            // list of accounts: index ∥ nonce ∥ balance ∥ pubkeyX ∥ pubkeyY, each chunk is 256 bits
-	HashState  []byte            // Hashed version of the state, each chunk is 256bits: ... ∥ H(index ∥ nonce ∥ balance ∥ pubkeyX ∥ pubkeyY)) ∥ ...
 	AccountMap map[string]uint64 // hashmap of all available accounts (the key is the account.pubkey.X), the value is the index of the account in the state
-	nbAccounts int               // number of accounts managed by this operator
 	h          hash.Hash         // hash function used to build the Merkle Tree
-	q          Queue             // queue of transfers
-	batch      int               // current number of transactions in a batch
 	Witnesses  Circuit           // witnesses for the snark circuit
 	ArboState  *arbo.Tree
 }
@@ -69,20 +65,8 @@ func NewOperator(nbAccounts int) Operator {
 	// create a list of empty accounts
 	res.State = make([]byte, SizeAccount*nbAccounts)
 
-	// initialize hash of the state
-	res.HashState = make([]byte, hFunc.Size()*nbAccounts)
-	for i := 0; i < nbAccounts; i++ {
-		hFunc.Reset()
-		_, _ = hFunc.Write(res.State[i*SizeAccount : i*SizeAccount+SizeAccount])
-		s := hFunc.Sum([]byte{})
-		copy(res.HashState[i*hFunc.Size():(i+1)*hFunc.Size()], s)
-	}
-
 	res.AccountMap = make(map[string]uint64)
-	res.nbAccounts = nbAccounts
 	res.h = hFunc
-	res.q = NewQueue(BatchSize)
-	res.batch = 0
 	return res
 }
 

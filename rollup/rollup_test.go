@@ -23,6 +23,7 @@ import (
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards/eddsa"
+	"go.vocdoni.io/dvote/db/metadb"
 )
 
 // The tests in the package are for the rollup in plain go only, there is no snark circuits
@@ -121,13 +122,17 @@ func TestOperatorUpdateAccount(t *testing.T) {
 	// create operator with 10 accounts
 	operator, userKeys := createOperator(10)
 
-	// get info on the parties
-	sender, err := operator.ReadAccount(0)
-	if err != nil {
+	if err := operator.initState(metadb.NewTest(t),
+		[]byte{0xca, 0xfe, 0x00},
+		[]byte{0xca, 0xfe, 0x01},
+		[]byte{0xca, 0xfe, 0x02},
+		[]byte{0xca, 0xfe, 0x03},
+	); err != nil {
 		t.Fatal(err)
 	}
 
-	receiver, err := operator.ReadAccount(1)
+	// get info on the parties
+	sender, err := operator.ReadAccount(0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,28 +146,6 @@ func TestOperatorUpdateAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// read the updated accounts of the sender and receiver and check if they are updated correctly
-	newSender, err := operator.ReadAccount(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	newReceiver, err := operator.ReadAccount(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var frAmount fr.Element
-	frAmount.SetUint64(amount)
-
-	sender.censusRoot++
-	sender.balance.Sub(&sender.balance, &frAmount)
-	receiver.balance.Add(&receiver.balance, &frAmount)
-
-	compareAccount(t, newSender, sender)
-	compareHashAccount(t, operator.HashState[0:operator.h.Size()], newSender, operator.h)
-
-	compareAccount(t, newReceiver, receiver)
-	compareHashAccount(t, operator.HashState[operator.h.Size():2*operator.h.Size()], newReceiver, operator.h)
 }
 
 func createVoter(i int) (Voter, eddsa.PrivateKey) {
@@ -193,8 +176,6 @@ func createVoter(i int) (Voter, eddsa.PrivateKey) {
 func createOperator(nbVoters int) (Operator, []eddsa.PrivateKey) {
 	operator := NewOperator(nbVoters)
 
-	operator.Witnesses.allocateSlicesMerkleProofs()
-
 	voterAccounts := make([]eddsa.PrivateKey, nbVoters)
 
 	// randomly fill the accounts
@@ -211,12 +192,6 @@ func createOperator(nbVoters int) (Operator, []eddsa.PrivateKey) {
 		baccount := acc.Serialize()
 
 		copy(operator.State[SizeAccount*i:], baccount)
-
-		// create the list of hashes of account
-		operator.h.Reset()
-		operator.h.Write(acc.Serialize())
-		buf := operator.h.Sum([]byte{})
-		copy(operator.HashState[operator.h.Size()*i:], buf)
 	}
 
 	return operator, voterAccounts

@@ -37,10 +37,6 @@ type circuitUpdateAccount Circuit
 
 // Circuit implements part of the rollup circuit only by declaring a subset of the constraints
 func (t *circuitUpdateAccount) Define(api frontend.API) error {
-	if err := (*Circuit)(t).PostInit(api); err != nil {
-		return err
-	}
-
 	verifyResults(api, t.BallotSum,
 		t.MerkleProofs.ResultsAdd.NewValue, t.MerkleProofs.ResultsAdd.OldValue,
 	)
@@ -52,7 +48,7 @@ func TestCircuitUpdateAccount(t *testing.T) {
 		t.Skip("skipping rollup tests for circleCI")
 	}
 
-	operator, users := createOperator(nbAccounts)
+	operator, users := createOperator(nbVoters)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -88,7 +84,6 @@ func TestCircuitUpdateAccount(t *testing.T) {
 	assert := test.NewAssert(t)
 
 	var updateAccountCircuit circuitUpdateAccount
-	(*Circuit)(&updateAccountCircuit).allocateSlicesMerkleProofs()
 
 	assert.ProverSucceeded(&updateAccountCircuit, &operator.Witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
 }
@@ -98,7 +93,7 @@ func TestCircuitFull(t *testing.T) {
 		t.Skip("skipping rollup tests for circleCI")
 	}
 
-	operator, users := createOperator(nbAccounts)
+	operator, users := createOperator(nbVoters)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -135,9 +130,6 @@ func TestCircuitFull(t *testing.T) {
 	// verifies the proofs of inclusion of the transfer
 
 	var rollupCircuit Circuit
-	rollupCircuit.allocateSlicesMerkleProofs()
-
-	_ = operator.Witnesses.PostInit(nil)
 	// wit := operator.Witnesses
 	// js, _ := json.MarshalIndent(wit, "", "  ")
 	// fmt.Printf("\n\n%s\n\n", js)
@@ -151,7 +143,7 @@ func TestCircuitFull(t *testing.T) {
 }
 
 func TestCircuitCompile(t *testing.T) {
-	operator, users := createOperator(nbAccounts)
+	operator, users := createOperator(nbVoters)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -191,7 +183,6 @@ func TestCircuitCompile(t *testing.T) {
 
 	// we allocate the slices of the circuit before compiling it
 	var inclusionProofCircuit Circuit
-	inclusionProofCircuit.allocateSlicesMerkleProofs()
 	logger.Set(zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "15:04:05"}).With().Timestamp().Logger())
 	p := profile.Start()
 	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &inclusionProofCircuit)
