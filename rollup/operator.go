@@ -36,19 +36,6 @@ var hFunc = mimc.NewMiMC()
 // BatchSize size of a batch of transactions to put in a snark
 var BatchSize = 10
 
-// Queue queue for storing the transfers (fixed size queue)
-type Queue struct {
-	listTransfers chan Vote
-}
-
-// NewQueue creates a new queue, BatchSizeCircuit is the capacity
-func NewQueue(BatchSizeCircuit int) Queue {
-	resChan := make(chan Vote, BatchSizeCircuit)
-	var res Queue
-	res.listTransfers = resChan
-	return res
-}
-
 // Operator represents a rollup operator
 type Operator struct {
 	h         hash.Hash // hash function used to build the Merkle Tree
