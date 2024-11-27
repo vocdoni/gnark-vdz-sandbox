@@ -33,17 +33,17 @@ import (
 	"go.vocdoni.io/dvote/db/metadb"
 )
 
-type circuitUpdateAccount Circuit
+type circuitVerifyResults Circuit
 
 // Circuit implements part of the rollup circuit only by declaring a subset of the constraints
-func (t *circuitUpdateAccount) Define(api frontend.API) error {
+func (t *circuitVerifyResults) Define(api frontend.API) error {
 	verifyResults(api, t.BallotSum,
 		t.MerkleProofs.ResultsAdd.OldValue, t.MerkleProofs.ResultsAdd.NewValue,
 	)
 	return nil
 }
 
-func TestCircuitUpdateAccount(t *testing.T) {
+func TestCircuitVerifyResults(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping rollup tests for circleCI")
 	}
@@ -71,9 +71,9 @@ func TestCircuitUpdateAccount(t *testing.T) {
 
 	assert := test.NewAssert(t)
 
-	var updateAccountCircuit circuitUpdateAccount
+	var circuitVerifyResultsPlaceholder circuitVerifyResults
 
-	assert.ProverSucceeded(&updateAccountCircuit, &operator.Witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
+	assert.ProverSucceeded(&circuitVerifyResultsPlaceholder, &operator.Witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
 
 	t.Log("prover succeeded, casted a vote of amount", amount)
 	debugLog(t, operator)
