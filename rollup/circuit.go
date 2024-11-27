@@ -128,11 +128,10 @@ func verifyMerkleProofs(api frontend.API, hFunc arbo.Hash, rootBefore, rootAfter
 	verifyMerkleProof(api, hFunc, rootBefore, mps.EncryptionKey)
 	// verify key transitions, order here is fundamental.
 	root := rootBefore
-	api.Println("root is rootBefore, i.e.", toHex(root))
+	api.Println("root is rootBefore, i.e.", prettyHex(root))
 	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsAdd)
-	api.Println("now root is", toHex(root))
+	api.Println("now root is", prettyHex(root))
 	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsSub)
-	api.Println("and now root is", toHex(root), "should be equal to rootAfter", toHex(root))
 	// for i := range mps.Nullifier {
 	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Nullifier[i])
 	// }
@@ -145,6 +144,7 @@ func verifyMerkleProofs(api frontend.API, hFunc arbo.Hash, rootBefore, rootAfter
 	// for i := range mps.Ballot {
 	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Ballot[i])
 	// }
+	api.Println("and now root is", prettyHex(root), "should be equal to rootAfter", prettyHex(root))
 	api.AssertIsEqual(root, rootAfter)
 }
 
@@ -160,7 +160,7 @@ func verifyMerkleProof(api frontend.API, hFunc arbo.Hash, root frontend.Variable
 //
 // and returns mp.NewRoot
 func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, oldRoot frontend.Variable, mp MerkleTransition) frontend.Variable {
-	api.Println("will verify merkle transition from root", toHex(mp.OldRoot), "->", toHex(mp.NewRoot))
+	api.Println("will verify merkle transition from root", prettyHex(mp.OldRoot), "->", prettyHex(mp.NewRoot))
 	api.AssertIsEqual(oldRoot, mp.OldRoot)
 	mp.Verify(api, hFunc)
 	return mp.NewRoot

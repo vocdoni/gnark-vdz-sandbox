@@ -191,16 +191,16 @@ func TestCircuitCompile(t *testing.T) {
 }
 
 func debugLog(t *testing.T, operator Operator) {
-	t.Log("public: RootHashBefore", toHex(operator.Witnesses.RootHashBefore))
-	t.Log("public: RootHashAfter", toHex(operator.Witnesses.RootHashAfter))
-	t.Log("public: NumVotes", toHex(operator.Witnesses.NumVotes))
-	t.Log("public: NumOverwrites", toHex(operator.Witnesses.NumOverwrites))
+	t.Log("public: RootHashBefore", prettyHex(operator.Witnesses.RootHashBefore))
+	t.Log("public: RootHashAfter", prettyHex(operator.Witnesses.RootHashAfter))
+	t.Log("public: NumVotes", prettyHex(operator.Witnesses.NumVotes))
+	t.Log("public: NumOverwrites", prettyHex(operator.Witnesses.NumOverwrites))
 	t.Log("BallotSum", operator.Witnesses.BallotSum)
 	for name, mt := range map[string]MerkleTransition{
 		"ResultsAdd": operator.Witnesses.MerkleProofs.ResultsAdd,
 		"ResultsSub": operator.Witnesses.MerkleProofs.ResultsSub,
 	} {
-		t.Log(name, "transitioned", "(root", toHex(mt.OldRoot), "->", toHex(mt.NewRoot), ")",
+		t.Log(name, "transitioned", "(root", prettyHex(mt.OldRoot), "->", prettyHex(mt.NewRoot), ")",
 			"value", mt.OldValue, "->", mt.NewValue,
 		)
 	}

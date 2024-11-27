@@ -175,10 +175,10 @@ func (mp *MerkleTransition) Verify(api frontend.API, h garbo.Hash) {
 }
 
 func (mp *MerkleTransition) printDebugLog(api frontend.API) {
-	api.Println("proving transition", toHex(mp.OldRoot), "->", toHex(mp.NewRoot))
-	api.Println("old key, value, root, isold0 = ", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.IsOld0)
-	api.Println("new key, value, root, fnc0,1 = ", mp.NewKey, mp.NewValue, toHex(mp.NewRoot), mp.Fnc0, mp.Fnc1)
+	api.Println("proving transition", prettyHex(mp.OldRoot), "->", prettyHex(mp.NewRoot))
+	api.Println("old key, value, root, isold0 = ", mp.OldKey, mp.OldValue, prettyHex(mp.OldRoot), mp.IsOld0)
+	api.Println("new key, value, root, fnc0,1 = ", mp.NewKey, mp.NewValue, prettyHex(mp.NewRoot), mp.Fnc0, mp.Fnc1)
 	for i := range mp.Siblings {
-		api.Println("siblings", toHex(mp.Siblings[i]))
+		api.Println("siblings", prettyHex(mp.Siblings[i]))
 	}
 }

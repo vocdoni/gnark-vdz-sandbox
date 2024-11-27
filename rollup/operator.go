@@ -147,7 +147,7 @@ func (o *Operator) mockProofs() error {
 	return nil
 }
 
-func toHex(v frontend.Variable) string {
+func prettyHex(v frontend.Variable) string {
 	switch v := v.(type) {
 	case (*big.Int):
 		return hex.EncodeToString(arbo.BigIntToBytesLE(32, v)[:4])
@@ -166,10 +166,10 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	if err != nil {
 		return ArboProof{}, ArboProof{}, err
 	}
-	fmt.Println("before:", "root=", toHex(mpBefore.Root), "k=", mpBefore.Key, "v=", mpBefore.Value,
+	fmt.Println("before:", "root=", prettyHex(mpBefore.Root), "k=", mpBefore.Key, "v=", mpBefore.Value,
 		"existence=", mpBefore.Existence)
 	for i := range mpBefore.Siblings {
-		fmt.Println("siblings=", toHex(mpBefore.Siblings[i]))
+		fmt.Println("siblings=", prettyHex(mpBefore.Siblings[i]))
 	}
 	if _, _, err := o.ArboState.Get(k); errors.Is(err, arbo.ErrKeyNotFound) {
 		if err := o.ArboState.Add(k, v); err != nil {
@@ -186,9 +186,9 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	if err != nil {
 		return ArboProof{}, ArboProof{}, err
 	}
-	fmt.Println("after: ", "root=", toHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
+	fmt.Println("after: ", "root=", prettyHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
 	for i := range mpAfter.Siblings {
-		fmt.Println("siblings=", toHex(mpAfter.Siblings[i]))
+		fmt.Println("siblings=", prettyHex(mpAfter.Siblings[i]))
 	}
 
 	root, _ := o.ArboState.Root()
@@ -204,9 +204,9 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 		if err != nil {
 			return ArboProof{}, ArboProof{}, err
 		}
-		fmt.Println("hacked:", "root=", toHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
+		fmt.Println("hacked:", "root=", prettyHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
 		for i := range mpAfter.Siblings {
-			fmt.Println("siblings=", toHex(mpAfter.Siblings[i]))
+			fmt.Println("siblings=", prettyHex(mpAfter.Siblings[i]))
 		}
 
 	}
