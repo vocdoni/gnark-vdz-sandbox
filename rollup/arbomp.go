@@ -136,24 +136,28 @@ func (o *Operator) GenArboProof(k []byte) (ArboProof, error) {
 	}, nil
 }
 
-// VerifyProof takes a Merkle root, a proofSet, and a proofIndex and returns
-// true if the first element of the proof set is a leaf of data in the Merkle
-// root. False is returned if the proof set or Merkle root is nil, and if
-// 'numLeaves' equals 0.
-func (mp *MerkleProof) VerifyProof(api frontend.API, h garbo.Hash) {
-	garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:])
+func (o *Operator) GenMerkleProofFromArbo(k []byte) (MerkleProof, error) {
+	p, err := o.GenArboProof(k)
+	if err != nil {
+		return MerkleProof{}, err
+	}
+	return MerkleProofFromArboProof(p), nil
 }
 
-// VerifyProof takes a Merkle root, a proofSet, and a proofIndex and returns
-// true if the first element of the proof set is a leaf of data in the Merkle
-// root. False is returned if the proof set or Merkle root is nil, and if
-// 'numLeaves' equals 0.
-func (mp *MerkleTransition) Verify(api frontend.API, h garbo.Hash) {
-	api.Println("old key, value, root, isold0 = ", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.IsOld0)
-	api.Println("new key, value, root, fnc0,1 = ", mp.NewKey, mp.NewValue, toHex(mp.NewRoot), mp.Fnc0, mp.Fnc1)
-	for i := range mp.Siblings {
-		api.Println("siblings", toHex(mp.Siblings[i]))
+// Verify uses garbo.CheckInclusionProof to verify that:
+//   - Key + Value belong to Root
+func (mp *MerkleProof) VerifyProof(api frontend.API, h garbo.Hash) {
+	if err := garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:]); err != nil {
+		panic(err)
 	}
+}
+
+// Verify uses smt.Processor to verify that:
+//   - OldKey + OldValue belong to OldRoot
+//   - NewKey + NewValue belong to NewRoot
+//   - no other changes were introduced between OldRoot -> NewRoot
+func (mp *MerkleTransition) Verify(api frontend.API, h garbo.Hash) {
+	mp.printDebugLog(api)
 
 	root := smt.Processor(api,
 		mp.OldRoot,
@@ -168,6 +172,13 @@ func (mp *MerkleTransition) Verify(api frontend.API, h garbo.Hash) {
 	)
 
 	api.AssertIsEqual(root, mp.NewRoot)
+}
 
-	api.Println("proved transition", toHex(mp.OldRoot), "->", toHex(mp.NewRoot))
+func (mp *MerkleTransition) printDebugLog(api frontend.API) {
+	api.Println("proving transition", toHex(mp.OldRoot), "->", toHex(mp.NewRoot))
+	api.Println("old key, value, root, isold0 = ", mp.OldKey, mp.OldValue, toHex(mp.OldRoot), mp.IsOld0)
+	api.Println("new key, value, root, fnc0,1 = ", mp.NewKey, mp.NewValue, toHex(mp.NewRoot), mp.Fnc0, mp.Fnc1)
+	for i := range mp.Siblings {
+		api.Println("siblings", toHex(mp.Siblings[i]))
+	}
 }

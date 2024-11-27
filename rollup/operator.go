@@ -108,18 +108,18 @@ func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, 
 	o.Witnesses.BallotSum = 0
 	o.mockProofs()
 
-	// if o.Witnesses.MerkleProofs.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
-	// 	return err
-	// }
-	// if o.Witnesses.MerkleProofs.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
-	// 	return err
-	// }
-	// if o.Witnesses.MerkleProofs.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
-	// 	return err
-	// }
-	// if o.Witnesses.MerkleProofs.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
-	// 	return err
-	// }
+	if o.Witnesses.MerkleProofs.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
+		return err
+	}
+	if o.Witnesses.MerkleProofs.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
+		return err
+	}
+	if o.Witnesses.MerkleProofs.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
+		return err
+	}
+	if o.Witnesses.MerkleProofs.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
+		return err
+	}
 
 	return nil
 }
