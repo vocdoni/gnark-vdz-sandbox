@@ -48,7 +48,7 @@ func TestCircuitUpdateAccount(t *testing.T) {
 		t.Skip("skipping rollup tests for circleCI")
 	}
 
-	operator, _ := createOperator(nbVoters)
+	operator := createOperator(nbVoters)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -59,18 +59,12 @@ func TestCircuitUpdateAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// read accounts involved in the transfer
-	sender, err := operator.ReadAccount(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// create the transfer and sign it
 	amount := uint64(20)
-	transfer := NewVote(amount, sender.pubKey)
+	transfer := NewVote(amount)
 
 	// update the state from the received transfer
-	err = operator.updateState(transfer)
+	err := operator.updateState(transfer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +84,7 @@ func TestCircuitFull(t *testing.T) {
 		t.Skip("skipping rollup tests for circleCI")
 	}
 
-	operator, _ := createOperator(nbVoters)
+	operator := createOperator(nbVoters)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -101,18 +95,12 @@ func TestCircuitFull(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// read accounts involved in the transfer
-	sender, err := operator.ReadAccount(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// create the transfer and sign it
 	amount := uint64(10)
-	transfer := NewVote(amount, sender.pubKey)
+	transfer := NewVote(amount)
 
 	// update the state from the received transfer
-	err = operator.updateState(transfer)
+	err := operator.updateState(transfer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +122,7 @@ func TestCircuitFull(t *testing.T) {
 }
 
 func TestCircuitCompile(t *testing.T) {
-	operator, _ := createOperator(nbVoters)
+	operator := createOperator(nbVoters)
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -145,18 +133,12 @@ func TestCircuitCompile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// read accounts involved in the transfer
-	sender, err := operator.ReadAccount(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// create the transfer and sign it
 	amount := uint64(16)
-	transfer := NewVote(amount, sender.pubKey)
+	transfer := NewVote(amount)
 
 	// update the state from the received transfer
-	err = operator.updateState(transfer)
+	err := operator.updateState(transfer)
 	if err != nil {
 		t.Fatal(err)
 	}

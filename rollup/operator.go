@@ -51,11 +51,9 @@ func NewQueue(BatchSizeCircuit int) Queue {
 
 // Operator represents a rollup operator
 type Operator struct {
-	State      []byte            // list of accounts: index ∥ nonce ∥ balance ∥ pubkeyX ∥ pubkeyY, each chunk is 256 bits
-	AccountMap map[string]uint64 // hashmap of all available accounts (the key is the account.pubkey.X), the value is the index of the account in the state
-	h          hash.Hash         // hash function used to build the Merkle Tree
-	Witnesses  Circuit           // witnesses for the snark circuit
-	ArboState  *arbo.Tree
+	h         hash.Hash // hash function used to build the Merkle Tree
+	Witnesses Circuit   // witnesses for the snark circuit
+	ArboState *arbo.Tree
 }
 
 // NewOperator creates a new operator.
@@ -63,26 +61,12 @@ type Operator struct {
 func NewOperator(nbAccounts int) Operator {
 	res := Operator{}
 
-	// create a list of empty accounts
-	res.State = make([]byte, SizeAccount*nbAccounts)
-
-	res.AccountMap = make(map[string]uint64)
 	res.h = hFunc
 	return res
 }
 
 func (o *Operator) H() hash.Hash {
 	return o.h
-}
-
-// ReadAccount reads the account located at index i
-func (o *Operator) ReadAccount(i uint64) (Voter, error) {
-	var res Voter
-	err := Deserialize(&res, o.State[int(i)*SizeAccount:int(i)*SizeAccount+SizeAccount])
-	if err != nil {
-		return res, err
-	}
-	return res, nil
 }
 
 func (o *Operator) UpdateState(t Vote) error {
@@ -243,13 +227,13 @@ func (o *Operator) updateState(t Vote) error {
 		o.Witnesses.RootHashBefore = arbo.BytesLEToBigInt(root)
 	}
 
-	o.Witnesses.ballotSum.Add(&o.Witnesses.ballotSum, &t.amount)
+	o.Witnesses.ballotSum.Add(&o.Witnesses.ballotSum, &t.ballot)
 
 	o.Witnesses.BallotSum = o.Witnesses.ballotSum
 
 	// update key 4 (ResultsAdd)
 	{
-		mpBefore, mpAfter, err := o.addKey([]byte{0x04}, arbo.BigIntToBytesLE(32, &t.amount))
+		mpBefore, mpAfter, err := o.addKey([]byte{0x04}, arbo.BigIntToBytesLE(32, &t.ballot))
 		if err != nil {
 			return err
 		}

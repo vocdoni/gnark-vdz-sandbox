@@ -18,22 +18,21 @@ package rollup
 
 import (
 	"math/big"
-
-	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards/eddsa"
 )
 
 // Vote describe a rollup transfer
 type Vote struct {
-	amount       big.Int
-	senderPubKey eddsa.PublicKey
+	ballot     big.Int
+	nullifier  []byte
+	commitment []byte
+	address    []byte
 }
 
 // NewVote creates a new transfer (to be signed)
-func NewVote(amount uint64, from eddsa.PublicKey) Vote {
+func NewVote(amount uint64) Vote {
 	var res Vote
 
-	res.amount.SetUint64(amount)
-	res.senderPubKey = from
+	res.ballot.SetUint64(amount)
 
 	return res
 }
