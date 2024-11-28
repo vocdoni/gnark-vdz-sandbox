@@ -24,6 +24,7 @@ import (
 	"hash"
 	"math/big"
 	"os"
+	"reflect"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/consensys/gnark/frontend"
@@ -33,22 +34,22 @@ import (
 
 var hFunc = mimc.NewMiMC()
 
-// BatchSize size of a batch of transactions to put in a snark
-var BatchSize = 10
-
 // Operator represents a rollup operator
 type Operator struct {
 	h         hash.Hash // hash function used to build the Merkle Tree
 	Witnesses Circuit   // witnesses for the snark circuit
 	ArboState *arbo.Tree
+
+	ballotSum *big.Int
 }
 
 // NewOperator creates a new operator.
 // nbAccounts is the number of accounts managed by this operator, h is the hash function for the merkle proofs
-func NewOperator(nbAccounts int) Operator {
+func NewOperator() Operator {
 	res := Operator{}
 
 	res.h = hFunc
+	res.ballotSum = big.NewInt(0)
 	return res
 }
 
@@ -62,7 +63,7 @@ func (o *Operator) UpdateState(t Vote) error {
 
 func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, encryptionKey []byte) error {
 	tree, err := arbo.NewTree(arbo.Config{
-		Database: db, MaxLevels: 4,
+		Database: db, MaxLevels: maxLevels,
 		HashFunction: arbo.HashFunctionPoseidon,
 	})
 	if err != nil {
@@ -89,61 +90,42 @@ func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, 
 	}
 
 	// mock, to avoid nulls
-	o.Witnesses.NumVotes = 0
+	o.Witnesses.NumNewVotes = 0
 	o.Witnesses.NumOverwrites = 0
 	o.Witnesses.AggregatedProof = 0
 	o.Witnesses.BallotSum = 0
-	o.mockProofs()
 
-	if o.Witnesses.MerkleProofs.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
+	if o.Witnesses.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
 		return err
 	}
-	if o.Witnesses.MerkleProofs.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
+	if o.Witnesses.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
 		return err
 	}
-	if o.Witnesses.MerkleProofs.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
+	if o.Witnesses.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
 		return err
 	}
-	if o.Witnesses.MerkleProofs.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
+	if o.Witnesses.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func (o *Operator) mockProofs() error {
-	mockProof, err := o.GenArboProof([]byte{0xff})
-	if err != nil {
-		return err
-	}
-	mockProofPair := MerkleTransitionFromArboProofPair(mockProof, mockProof)
-	o.Witnesses.MerkleProofs.ResultsAdd = mockProofPair
-	o.Witnesses.MerkleProofs.ResultsSub = mockProofPair
-	// for i := range o.Witnesses.MerkleProofs.Address {
-	// 	o.Witnesses.MerkleProofs.Address[i] = mockProofPair
-	// }
-	// for i := range o.Witnesses.MerkleProofs.Ballot {
-	// 	o.Witnesses.MerkleProofs.Ballot[i] = mockProofPair
-	// }
-	// for i := range o.Witnesses.MerkleProofs.Commitment {
-	// 	o.Witnesses.MerkleProofs.Commitment[i] = mockProofPair
-	// }
-	// for i := range o.Witnesses.MerkleProofs.Nullifier {
-	// 	o.Witnesses.MerkleProofs.Nullifier[i] = mockProofPair
-	// }
 	return nil
 }
 
 func prettyHex(v frontend.Variable) string {
+	type hasher interface {
+		HashCode() [16]byte
+	}
 	switch v := v.(type) {
 	case (*big.Int):
 		return hex.EncodeToString(arbo.BigIntToBytesLE(32, v)[:4])
 	case int:
 		return fmt.Sprintf("%d", v)
 	case []byte:
-		return fmt.Sprintf("(byte)%x", v)
+		return fmt.Sprintf("%x", v[:4])
+	case hasher:
+		return fmt.Sprintf("%x", v.HashCode())
 	default:
-		return fmt.Sprintf("(unknown)%+v", v)
+		return fmt.Sprintf("(%v)=%+v", reflect.TypeOf(v), v)
 	}
 }
 
@@ -160,7 +142,7 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	}
 	if _, _, err := o.ArboState.Get(k); errors.Is(err, arbo.ErrKeyNotFound) {
 		if err := o.ArboState.Add(k, v); err != nil {
-			return ArboProof{}, ArboProof{}, err
+			return ArboProof{}, ArboProof{}, fmt.Errorf("add key failed: %w", err)
 		}
 	} else {
 		fmt.Println("\nkey exists, update instead", "k=", k, "v=", v)
@@ -178,8 +160,8 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 		fmt.Println("siblings=", prettyHex(mpAfter.Siblings[i]))
 	}
 
-	root, _ := o.ArboState.Root()
-	o.ArboState.PrintGraphviz(root)
+	// root, _ := o.ArboState.Root()
+	// o.ArboState.PrintGraphviz(root)
 
 	if _, b := os.LookupEnv("HACK"); b && bytes.Equal(k, []byte{0x03}) {
 		fmt.Printf("\n ...now hack key 0x00=%v and regenerate proof for key 0x04\n", v)
@@ -205,7 +187,6 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 // numTransfer is the number of the transfer currently handled (between 0 and BatchSizeCircuit)
 func (o *Operator) updateState(t Vote) error {
 	// RootHashBefore
-
 	{
 		root, err := o.ArboState.Root()
 		if err != nil {
@@ -214,9 +195,7 @@ func (o *Operator) updateState(t Vote) error {
 		o.Witnesses.RootHashBefore = arbo.BytesLEToBigInt(root)
 	}
 
-	o.Witnesses.ballotSum.Add(&o.Witnesses.ballotSum, &t.ballot)
-
-	o.Witnesses.BallotSum = o.Witnesses.ballotSum
+	o.Witnesses.BallotSum = o.ballotSum.Add(o.ballotSum, &t.ballot)
 
 	// update key 4 (ResultsAdd)
 	{
@@ -224,20 +203,34 @@ func (o *Operator) updateState(t Vote) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%+v\n", mpBefore)
-		fmt.Printf("%+v\n", mpAfter)
-		o.Witnesses.MerkleProofs.ResultsAdd = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
+		o.Witnesses.ResultsAdd = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
 	}
 
-	// add key 0f (mocking a new nullifier)
+	// update key 5 (ResultsSub)
 	{
-		mpBefore, mpAfter, err := o.addKey([]byte{0x0f}, []byte{0xff})
+		mpBefore, mpAfter, err := o.addKey([]byte{0x05}, []byte{0x00}) // mock
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%+v\n", mpBefore)
-		fmt.Printf("%+v\n", mpAfter)
-		o.Witnesses.MerkleProofs.ResultsSub = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
+		o.Witnesses.ResultsSub = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
+	}
+
+	// add a mock ballot
+	{
+		mpBefore, mpAfter, err := o.addKey(t.nullifier, arbo.BigIntToBytesLE(32, &t.ballot))
+		if err != nil {
+			return err
+		}
+		o.Witnesses.Ballot[0] = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
+	}
+
+	// add a mock commitment
+	{
+		mpBefore, mpAfter, err := o.addKey(t.address, arbo.BigIntToBytesLE(32, &t.commitment))
+		if err != nil {
+			return err
+		}
+		o.Witnesses.Commitment[0] = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
 	}
 
 	// RootHashAfter

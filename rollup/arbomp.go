@@ -24,7 +24,7 @@ type ArboProof struct {
 type MerkleProof struct {
 	// Key + Value hashed through Siblings path, should produce Root hash
 	Root     frontend.Variable
-	Siblings [depth]frontend.Variable
+	Siblings [maxLevels]frontend.Variable
 	Key      frontend.Variable
 	Value    frontend.Variable
 	Fnc      frontend.Variable // 0: inclusion, 1: non inclusion
@@ -34,7 +34,7 @@ type MerkleProof struct {
 type MerkleTransition struct {
 	// NewKey + NewValue hashed through Siblings path, should produce NewRoot hash
 	NewRoot  frontend.Variable
-	Siblings [depth]frontend.Variable
+	Siblings [maxLevels]frontend.Variable
 	NewKey   frontend.Variable
 	NewValue frontend.Variable
 
@@ -102,9 +102,9 @@ func MerkleProofFromArboProof(p ArboProof) MerkleProof {
 	}
 }
 
-func padSiblings(unpackedSiblings [][]byte) [depth]frontend.Variable {
-	paddedSiblings := [depth]frontend.Variable{}
-	for i := range depth {
+func padSiblings(unpackedSiblings [][]byte) [maxLevels]frontend.Variable {
+	paddedSiblings := [maxLevels]frontend.Variable{}
+	for i := range maxLevels {
 		if i < len(unpackedSiblings) {
 			paddedSiblings[i] = arbo.BytesLEToBigInt(unpackedSiblings[i])
 		} else {

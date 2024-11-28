@@ -18,21 +18,28 @@ package rollup
 
 import (
 	"math/big"
+
+	"go.vocdoni.io/dvote/tree/arbo"
 )
 
 // Vote describe a rollup transfer
 type Vote struct {
-	ballot     big.Int
-	nullifier  []byte
-	commitment []byte
-	address    []byte
+	nullifier  []byte  // key
+	ballot     big.Int // value
+	address    []byte  // key
+	commitment big.Int // value
 }
 
 // NewVote creates a new transfer (to be signed)
 func NewVote(amount uint64) Vote {
-	var res Vote
+	var v Vote
 
-	res.ballot.SetUint64(amount)
+	// v.nullifier = arbo.BigIntToBytesLE(maxKeyLen, big.NewInt(int64(rand.Uint64())+16)) // mock
 
-	return res
+	v.nullifier = arbo.BigIntToBytesLE(maxKeyLen, big.NewInt(int64(1)+16)) // mock
+	v.ballot.SetUint64(amount)
+
+	v.address = arbo.BigIntToBytesLE(maxKeyLen, big.NewInt(int64(2)+16)) // mock
+	v.commitment.SetUint64(amount * amount)                              // mock
+	return v
 }

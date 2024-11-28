@@ -17,17 +17,18 @@ limitations under the License.
 package rollup
 
 import (
-	"math/big"
-
 	"github.com/consensys/gnark/frontend"
 	"github.com/vocdoni/gnark-crypto-primitives/arbo"
 	"github.com/vocdoni/gnark-crypto-primitives/poseidon"
 )
 
 const (
-	nbVoters      = 16 // 16 accounts so we know that the proof length is 5
-	depth         = 5  // size fo the inclusion proofs
-	VoteBatchSize = 10 // nbVotes that were processed in AggregatedProof
+	// size of the inclusion proofs
+	maxLevels = 16
+	// maxKeyLen is ceil(maxLevels/8)
+	maxKeyLen = (maxLevels + 7) / 8
+	// nbVotes that were processed in AggregatedProof
+	VoteBatchSize = 1
 )
 
 type Circuit struct {
@@ -37,115 +38,110 @@ type Circuit struct {
 	// list of root hashes
 	RootHashBefore frontend.Variable `gnark:",public"`
 	RootHashAfter  frontend.Variable `gnark:",public"`
-	NumVotes       frontend.Variable `gnark:",public"`
+	NumNewVotes    frontend.Variable `gnark:",public"`
 	NumOverwrites  frontend.Variable `gnark:",public"`
 
 	// ---------------------------------------------------------------------------------------------
 	// SECRET INPUTS
 
 	AggregatedProof frontend.Variable // mock, this should be a zkProof
-	// list of proofs corresponding to each tree modification
-	MerkleProofs MerkleProofs
 
-	// all of these values compose the preimage that is hashed
-	// to produce the public input needed to verify AggregatedProof.
-	// they are extracted from the MerkleProofs,
-	// except BallotSum, so we declare it as a frontend.Variable
-	// ProcessID     frontend.Variable --> MerkleProofs.ProcessID.Leaf
-	// CensusRoot    frontend.Variable --> MerkleProofs.CensusRoot.Leaf
-	// BallotMode    frontend.Variable --> MerkleProofs.BallotMode.Leaf
-	// EncryptionKey eddsa.PublicKey `gnark:"-"` --> MerkleProofs.EncryptionKey.Leaf
-	// Nullifiers    [VoteBatchSize]frontend.Variable --> MerkleProofs.Nullifier[i].Leaf
-	// Commitments   [VoteBatchSize]frontend.Variable --> MerkleProofs.Commitment[i].Leaf
-	// Addressess    [VoteBatchSize]frontend.Variable --> MerkleProofs.Addresse[i].Leaf
-	// Ballots       [VoteBatchSize]frontend.Variable --> MerkleProofs.Ballot[i].Leaf
-	BallotSum frontend.Variable
-	ballotSum big.Int
-}
-
-// MerkleProofs contains the SMT Witness
-type MerkleProofs struct {
 	ProcessID     MerkleProof
 	CensusRoot    MerkleProof
 	BallotMode    MerkleProof
 	EncryptionKey MerkleProof
 	ResultsAdd    MerkleTransition
 	ResultsSub    MerkleTransition
-	// Nullifier     [VoteBatchSize]MerkleTransition
-	// Commitment    [VoteBatchSize]MerkleTransition
-	// Address       [VoteBatchSize]MerkleTransition
-	// Ballot        [VoteBatchSize]MerkleTransition
+	Ballot        [VoteBatchSize]MerkleTransition
+	Commitment    [VoteBatchSize]MerkleTransition
+
+	// all of these values compose the preimage that is hashed
+	// to produce the public input needed to verify AggregatedProof.
+	// they are extracted from the MerkleProofs,
+	// except BallotSum, so we declare it as a frontend.Variable
+	// ProcessID     --> ProcessID.Value
+	// CensusRoot    --> CensusRoot.Value
+	// BallotMode    --> BallotMode.Value
+	// EncryptionKey --> EncryptionKey.Value
+	// Nullifiers    --> Ballot[i].NewKey
+	// Ballots       --> Ballot[i].NewValue
+	// Addressess    --> Commitment[i].NewKey
+	// Commitments   --> Commitment[i].NewValue
+	BallotSum frontend.Variable
 }
 
 // Define declares the circuit's constraints
 func (circuit Circuit) Define(api frontend.API) error {
-	packedInput := packInputs(
-		api,
-	// circuit.MerkleProofs.ProcessID,
-	// circuit.MerkleProofs.CensusRoot,
-	// circuit.MerkleProofs.BallotMode,
-	// circuit.MerkleProofs.EncryptionKey,
-	// circuit.MerkleProofs.Nullifiers,
-	// circuit.MerkleProofs.Commitments,
-	// circuit.MerkleProofs.Addresses,
-	// circuit.MerkleProofs.EncryptedBallots,
-	)
+	packedInput := circuit.packInputs(api)
 
-	verifyAggregatedZKProof(api, circuit.AggregatedProof, packedInput)
-	verifyMerkleProofs(api, poseidon.Hash,
-		circuit.RootHashBefore,
-		circuit.RootHashAfter,
-		circuit.MerkleProofs)
-	verifyResults(api, circuit.BallotSum,
-		circuit.MerkleProofs.ResultsAdd.OldValue, circuit.MerkleProofs.ResultsAdd.NewValue,
-	)
-	// verifyOverwrites(api, circuit.MerkleProofs.Ballot,
-	// 	circuit.MerkleProofs.ResultsSub.OldValue, circuit.MerkleProofs.ResultsSub.Value,
-	// )
-	verifyStats(api)
+	circuit.verifyAggregatedZKProof(api, packedInput)
+	circuit.verifyMerkleProofs(api, poseidon.Hash)
+	circuit.verifyMerkleTransitions(api, poseidon.Hash)
+	circuit.verifyResults(api)
+	circuit.verifyOverwrites(api)
+	circuit.verifyStats(api)
 
 	return nil
 }
 
-func packInputs(api frontend.API, mps ...MerkleProof) frontend.Variable {
-	for i := range mps {
-		api.Println("packInputs mock", i) // mock
+// packInputs extracts the Values (or NewKey, NewValue) of
+//
+//	circuit.ProcessID,
+//	circuit.CensusRoot,
+//	circuit.BallotMode,
+//	circuit.EncryptionKey,
+//	circuit.Commitment[],
+//	circuit.Ballot[],
+//
+// and returns a hash that is used to verify AggregatedZKProof
+func (circuit Circuit) packInputs(api frontend.API) frontend.Variable {
+	for i, p := range []MerkleProof{
+		circuit.ProcessID,
+		circuit.CensusRoot,
+		circuit.BallotMode,
+		circuit.EncryptionKey,
+	} {
+		api.Println("packInputs mock", i, p.Value) // mock
+	}
+	for i := range circuit.Ballot {
+		api.Println("packInputs mock nullifier", i, circuit.Ballot[i].NewKey) // mock
+		api.Println("packInputs mock ballot", i, circuit.Ballot[i].NewValue)  // mock
+	}
+	for i := range circuit.Commitment {
+		api.Println("packInputs mock address", i, circuit.Commitment[i].NewKey)      // mock
+		api.Println("packInputs mock commitment", i, circuit.Commitment[i].NewValue) // mock
 	}
 	return 1
 }
 
-func verifyAggregatedZKProof(api frontend.API, aggrProof, packedInput frontend.Variable) {
-	api.Println("verifyAggregatedZKProof mock", aggrProof, packedInput) // mock
+func (circuit Circuit) verifyAggregatedZKProof(api frontend.API, packedInput frontend.Variable) {
+	api.Println("verifyAggregatedZKProof mock", circuit.AggregatedProof, packedInput) // mock
 
 	api.AssertIsEqual(1, 1) // TODO: mock, should actually verify Aggregated ZKProof
 }
 
-func verifyMerkleProofs(api frontend.API, hFunc arbo.Hash, rootBefore, rootAfter frontend.Variable, mps MerkleProofs) {
+func (circuit Circuit) verifyMerkleProofs(api frontend.API, hFunc arbo.Hash) {
 	// check process is untouched
-	verifyMerkleProof(api, hFunc, rootBefore, mps.ProcessID)
-	verifyMerkleProof(api, hFunc, rootBefore, mps.CensusRoot)
-	verifyMerkleProof(api, hFunc, rootBefore, mps.BallotMode)
-	verifyMerkleProof(api, hFunc, rootBefore, mps.EncryptionKey)
+	verifyMerkleProof(api, hFunc, circuit.RootHashBefore, circuit.ProcessID)
+	verifyMerkleProof(api, hFunc, circuit.RootHashBefore, circuit.CensusRoot)
+	verifyMerkleProof(api, hFunc, circuit.RootHashBefore, circuit.BallotMode)
+	verifyMerkleProof(api, hFunc, circuit.RootHashBefore, circuit.EncryptionKey)
+}
+
+func (circuit Circuit) verifyMerkleTransitions(api frontend.API, hFunc arbo.Hash) {
 	// verify key transitions, order here is fundamental.
-	root := rootBefore
-	api.Println("root is rootBefore, i.e.", prettyHex(root))
-	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsAdd)
-	api.Println("now root is", prettyHex(root))
-	root = verifyMerkleTransition(api, hFunc, root, mps.ResultsSub)
-	// for i := range mps.Nullifier {
-	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Nullifier[i])
-	// }
-	// for i := range mps.Commitment {
-	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Commitment[i])
-	// }
-	// for i := range mps.Address {
-	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Address[i])
-	// }
-	// for i := range mps.Ballot {
-	// 	root = verifyMerkleTransition(api, hFunc, root, mps.Ballot[i])
-	// }
-	api.Println("and now root is", prettyHex(root), "should be equal to rootAfter", prettyHex(root))
-	api.AssertIsEqual(root, rootAfter)
+	root := circuit.RootHashBefore
+	api.Println("root starts with RootHashBefore, i.e.", prettyHex(root))
+	root = verifyMerkleTransition(api, hFunc, root, circuit.ResultsAdd)
+	root = verifyMerkleTransition(api, hFunc, root, circuit.ResultsSub)
+	for i := range circuit.Ballot {
+		root = verifyMerkleTransition(api, hFunc, root, circuit.Ballot[i])
+	}
+	for i := range circuit.Commitment {
+		root = verifyMerkleTransition(api, hFunc, root, circuit.Commitment[i])
+	}
+	api.Println("and now root is", prettyHex(root), "should be equal to RootHashAfter", prettyHex(circuit.RootHashAfter))
+	api.AssertIsEqual(root, circuit.RootHashAfter)
 }
 
 func verifyMerkleProof(api frontend.API, hFunc arbo.Hash, root frontend.Variable, mp MerkleProof) {
@@ -160,26 +156,26 @@ func verifyMerkleProof(api frontend.API, hFunc arbo.Hash, root frontend.Variable
 //
 // and returns mp.NewRoot
 func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, oldRoot frontend.Variable, mp MerkleTransition) frontend.Variable {
-	api.Println("will verify merkle transition from root", prettyHex(mp.OldRoot), "->", prettyHex(mp.NewRoot))
+	api.Println("now root is", prettyHex(oldRoot))
 	api.AssertIsEqual(oldRoot, mp.OldRoot)
 	mp.Verify(api, hFunc)
 	return mp.NewRoot
 }
 
-func verifyResults(api frontend.API, sum, resultsAddBefore, resultsAddAfter frontend.Variable,
-) {
+func (circuit Circuit) verifyResults(api frontend.API) {
 	// TODO: mock, sum should be elGamal arithmetic
-	api.AssertIsEqual(api.Add(resultsAddBefore, sum), resultsAddAfter)
+	api.AssertIsEqual(api.Add(circuit.ResultsAdd.OldValue, circuit.BallotSum),
+		circuit.ResultsAdd.NewValue)
 }
 
 // verifyOverwrites is not planned for PoC v1.0
-func verifyOverwrites(api frontend.API, ballots [VoteBatchSize]MerkleTransition, resultsSubBefore, resultsSubAfter frontend.Variable,
-) {
+func (circuit Circuit) verifyOverwrites(api frontend.API) {
 	// TODO: mock, sum should be elGamal arithmetic
-	// api.AssertIsEqual(api.Add(resultsSubBefore, ballots), resultsSubAfter)
+	// api.AssertIsEqual(api.Add(circuit.ResultsSub.OldValue, circuit.BallotSum),
+	// 	circuit.ResultsSub.NewValue)
 }
 
-func verifyStats(api frontend.API) {
+func (circuit Circuit) verifyStats(api frontend.API) {
 	// TBD
 	// Check NumVotes = len(Nullifiers)
 	// Check NumOverwrites = len(EncryptedBallots) - len(Nullifiers)

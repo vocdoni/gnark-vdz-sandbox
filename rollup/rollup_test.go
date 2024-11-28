@@ -60,7 +60,7 @@ func TestOperatorVote(t *testing.T) {
 	var amount uint64
 
 	// create operator with 10 accounts
-	operator := createOperator(10)
+	operator := createOperator()
 
 	if err := operator.initState(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
@@ -82,8 +82,8 @@ func TestOperatorVote(t *testing.T) {
 }
 
 // Returns a newly created operator and the private keys of the associated accounts
-func createOperator(nbVoters int) Operator {
-	operator := NewOperator(nbVoters)
+func createOperator() Operator {
+	operator := NewOperator()
 
 	return operator
 }
