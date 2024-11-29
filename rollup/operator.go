@@ -18,115 +18,75 @@ package rollup
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash"
 	"math/big"
 	"os"
-	"reflect"
 
-	"github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
-	"github.com/consensys/gnark/frontend"
 	"go.vocdoni.io/dvote/db"
 	"go.vocdoni.io/dvote/tree/arbo"
 )
 
-var hFunc = mimc.NewMiMC()
+var hashFunc = arbo.HashFunctionPoseidon
 
 // Operator represents a rollup operator
 type Operator struct {
-	h         hash.Hash // hash function used to build the Merkle Tree
-	Witnesses Circuit   // witnesses for the snark circuit
-	ArboState *arbo.Tree
+	state     *arbo.Tree
+	Witnesses Circuit // witnesses for the snark circuit
 
 	ballotSum *big.Int
 }
 
 // NewOperator creates a new operator.
-// nbAccounts is the number of accounts managed by this operator, h is the hash function for the merkle proofs
-func NewOperator() Operator {
-	res := Operator{}
-
-	res.h = hFunc
-	res.ballotSum = big.NewInt(0)
-	return res
-}
-
-func (o *Operator) H() hash.Hash {
-	return o.h
-}
-
-func (o *Operator) UpdateState(t Vote) error {
-	return o.updateState(t)
-}
-
-func (o *Operator) initState(db db.Database, processID, censusRoot, ballotMode, encryptionKey []byte) error {
+func NewOperator(db db.Database, processID, censusRoot, ballotMode, encryptionKey []byte) (Operator, error) {
+	o := Operator{}
 	tree, err := arbo.NewTree(arbo.Config{
 		Database: db, MaxLevels: maxLevels,
-		HashFunction: arbo.HashFunctionPoseidon,
+		HashFunction: hashFunc,
 	})
 	if err != nil {
-		return err
+		return Operator{}, err
 	}
-	o.ArboState = tree
+	o.state = tree
 	if _, _, err := o.addKey([]byte{0x00}, processID); err != nil {
-		return err
+		return Operator{}, err
 	}
 	if _, _, err := o.addKey([]byte{0x01}, censusRoot); err != nil {
-		return err
+		return Operator{}, err
 	}
 	if _, _, err := o.addKey([]byte{0x02}, ballotMode); err != nil {
-		return err
+		return Operator{}, err
 	}
 	if _, _, err := o.addKey([]byte{0x03}, encryptionKey); err != nil {
-		return err
+		return Operator{}, err
 	}
 	if _, _, err := o.addKey([]byte{0x04}, []byte{0x00}); err != nil { // ResultsAdd
-		return err
+		return Operator{}, err
 	}
 	if _, _, err := o.addKey([]byte{0x05}, []byte{0x00}); err != nil { // ResultsSub
-		return err
+		return Operator{}, err
 	}
 
-	// mock, to avoid nulls
+	if o.Witnesses.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
+		return Operator{}, err
+	}
+	if o.Witnesses.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
+		return Operator{}, err
+	}
+	if o.Witnesses.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
+		return Operator{}, err
+	}
+	if o.Witnesses.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
+		return Operator{}, err
+	}
+
 	o.Witnesses.NumNewVotes = 0
 	o.Witnesses.NumOverwrites = 0
 	o.Witnesses.AggregatedProof = 0
 	o.Witnesses.BallotSum = 0
+	o.ballotSum = big.NewInt(0)
 
-	if o.Witnesses.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
-		return err
-	}
-	if o.Witnesses.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
-		return err
-	}
-	if o.Witnesses.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
-		return err
-	}
-	if o.Witnesses.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func prettyHex(v frontend.Variable) string {
-	type hasher interface {
-		HashCode() [16]byte
-	}
-	switch v := v.(type) {
-	case (*big.Int):
-		return hex.EncodeToString(arbo.BigIntToBytesLE(32, v)[:4])
-	case int:
-		return fmt.Sprintf("%d", v)
-	case []byte:
-		return fmt.Sprintf("%x", v[:4])
-	case hasher:
-		return fmt.Sprintf("%x", v.HashCode())
-	default:
-		return fmt.Sprintf("(%v)=%+v", reflect.TypeOf(v), v)
-	}
+	return o, nil
 }
 
 func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
@@ -140,13 +100,13 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	for i := range mpBefore.Siblings {
 		fmt.Println("siblings=", prettyHex(mpBefore.Siblings[i]))
 	}
-	if _, _, err := o.ArboState.Get(k); errors.Is(err, arbo.ErrKeyNotFound) {
-		if err := o.ArboState.Add(k, v); err != nil {
+	if _, _, err := o.state.Get(k); errors.Is(err, arbo.ErrKeyNotFound) {
+		if err := o.state.Add(k, v); err != nil {
 			return ArboProof{}, ArboProof{}, fmt.Errorf("add key failed: %w", err)
 		}
 	} else {
 		fmt.Println("\nkey exists, update instead", "k=", k, "v=", v)
-		if err := o.ArboState.Update(k, v); err != nil {
+		if err := o.state.Update(k, v); err != nil {
 			return ArboProof{}, ArboProof{}, err
 		}
 	}
@@ -166,7 +126,7 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	if _, b := os.LookupEnv("HACK"); b && bytes.Equal(k, []byte{0x03}) {
 		fmt.Printf("\n ...now hack key 0x00=%v and regenerate proof for key 0x04\n", v)
 
-		if err := o.ArboState.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {
+		if err := o.state.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {
 			return ArboProof{}, ArboProof{}, err
 		}
 		mpAfter, err := o.GenArboProof(k)
@@ -183,12 +143,12 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	return mpBefore, mpAfter, nil
 }
 
-// updateState updates the state according to transfer
+// addVote updates the state according to transfer
 // numTransfer is the number of the transfer currently handled (between 0 and BatchSizeCircuit)
-func (o *Operator) updateState(t Vote) error {
+func (o *Operator) addVote(t Vote) error {
 	// RootHashBefore
 	{
-		root, err := o.ArboState.Root()
+		root, err := o.state.Root()
 		if err != nil {
 			return err
 		}
@@ -235,7 +195,7 @@ func (o *Operator) updateState(t Vote) error {
 
 	// RootHashAfter
 	{
-		root, err := o.ArboState.Root()
+		root, err := o.state.Root()
 		if err != nil {
 			return err
 		}

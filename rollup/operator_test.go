@@ -37,53 +37,23 @@ type AgreggatedProofPublicInputs struct {
 	EncryptedBallotSum int
 }
 
-func TestOutsideZKProof(t *testing.T) {
-	// create operator with 10 voters
-	// operator, _ := createOperator(10)
+func TestOperatorVote(t *testing.T) {
+	operator := newTestOperator(t)
 
-	// preimage := AgreggatedProofPublicInputs{
-	// 	ProcessId:          []byte{0xca, 0xfe, 0x01},
-	// 	CensusRoot:         []byte{0xca, 0xfe, 0x02},
-	// 	BallotMode:         []byte{0xca, 0xfe, 0x03},
-	// 	EncryptionKey:      []byte{0xca, 0xfe, 0x04},
-	// 	Nullifiers:         [][]byte{},
-	// 	Commitments:        [][]byte{},
-	// 	Addressess:         [][]byte{},
-	// 	EncryptedBallots:   []int{},
-	// 	EncryptedBallotSum: 0,
-	// }
-
-	// operator.updateState()
+	if err := operator.addVote(NewVote(16)); err != nil {
+		t.Fatal(err)
+	}
 }
 
-func TestOperatorVote(t *testing.T) {
-	var amount uint64
-
-	// create operator with 10 accounts
-	operator := createOperator()
-
-	if err := operator.initState(metadb.NewTest(t),
+func newTestOperator(t *testing.T) Operator {
+	operator, err := NewOperator(metadb.NewTest(t),
 		[]byte{0xca, 0xfe, 0x00},
 		[]byte{0xca, 0xfe, 0x01},
 		[]byte{0xca, 0xfe, 0x02},
 		[]byte{0xca, 0xfe, 0x03},
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// create the transfer and sign it
-	amount = 15
-	transfer := NewVote(amount)
-
-	err := operator.updateState(transfer)
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-}
-
-// Returns a newly created operator and the private keys of the associated accounts
-func createOperator() Operator {
-	operator := NewOperator()
-
 	return operator
 }

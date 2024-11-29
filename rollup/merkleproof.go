@@ -115,11 +115,11 @@ func padSiblings(unpackedSiblings [][]byte) [maxLevels]frontend.Variable {
 }
 
 func (o *Operator) GenArboProof(k []byte) (ArboProof, error) {
-	root, err := o.ArboState.Root()
+	root, err := o.state.Root()
 	if err != nil {
 		return ArboProof{}, err
 	}
-	leafK, leafV, packedSiblings, existence, err := o.ArboState.GenProof(k)
+	leafK, leafV, packedSiblings, existence, err := o.state.GenProof(k)
 	if err != nil {
 		return ArboProof{}, err
 	}

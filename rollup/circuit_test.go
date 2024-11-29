@@ -17,6 +17,7 @@ limitations under the License.
 package rollup
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -27,10 +28,8 @@ import (
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/logger"
-	"github.com/consensys/gnark/profile"
 	"github.com/consensys/gnark/test"
 	"github.com/rs/zerolog"
-	"go.vocdoni.io/dvote/db/metadb"
 )
 
 type circuitVerifyResults Circuit
@@ -45,28 +44,9 @@ func (t *circuitVerifyResults) Define(api frontend.API) error {
 }
 
 func TestCircuitVerifyResults(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping rollup tests for circleCI")
-	}
+	operator := newTestOperator(t)
 
-	operator := createOperator()
-
-	if err := operator.initState(metadb.NewTest(t),
-		[]byte{0xca, 0xfe, 0x00},
-		[]byte{0xca, 0xfe, 0x01},
-		[]byte{0xca, 0xfe, 0x02},
-		[]byte{0xca, 0xfe, 0x03},
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// create the transfer and sign it
-	amount := uint64(20)
-	transfer := NewVote(amount)
-
-	// update the state from the received transfer
-	err := operator.updateState(transfer)
-	if err != nil {
+	if err := operator.addVote(NewVote(16)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,95 +54,67 @@ func TestCircuitVerifyResults(t *testing.T) {
 
 	var circuitVerifyResultsPlaceholder circuitVerifyResults
 
-	assert.ProverSucceeded(&circuitVerifyResultsPlaceholder, &operator.Witnesses, test.WithCurves(ecc.BN254), test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
+	assert.ProverSucceeded(
+		&circuitVerifyResultsPlaceholder,
+		&operator.Witnesses,
+		test.WithCurves(ecc.BN254),
+		test.WithCompileOpts(frontend.IgnoreUnconstrainedInputs()))
 
-	t.Log("prover succeeded, casted a vote of amount", amount)
 	debugLog(t, operator)
 }
 
 func TestCircuitFull(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping rollup tests for circleCI")
-	}
+	operator := newTestOperator(t)
 
-	operator := createOperator()
-
-	if err := operator.initState(metadb.NewTest(t),
-		[]byte{0xca, 0xfe, 0x00},
-		[]byte{0xca, 0xfe, 0x01},
-		[]byte{0xca, 0xfe, 0x02},
-		[]byte{0xca, 0xfe, 0x03},
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// create the transfer and sign it
-	amount := uint64(10)
-	transfer := NewVote(amount)
-
-	// update the state from the received transfer
-	err := operator.updateState(transfer)
-	if err != nil {
+	if err := operator.addVote(NewVote(16)); err != nil {
 		t.Fatal(err)
 	}
 
 	assert := test.NewAssert(t)
-	// verifies the proofs of inclusion of the transfer
 
-	var rollupCircuit Circuit
-	// wit := operator.Witnesses
-	// js, _ := json.MarshalIndent(wit, "", "  ")
-	// fmt.Printf("\n\n%s\n\n", js)
+	var fullCircuit Circuit
 
-	// TODO full circuit has some unconstrained inputs, that's odd.
 	assert.ProverSucceeded(
-		&rollupCircuit,
+		&fullCircuit,
 		&operator.Witnesses,
 		test.WithCurves(ecc.BN254),
 		test.WithBackends(backend.GROTH16))
 }
 
 func TestCircuitCompile(t *testing.T) {
-	operator := createOperator()
+	operator := newTestOperator(t)
 
-	if err := operator.initState(metadb.NewTest(t),
-		[]byte{0xca, 0xfe, 0x00},
-		[]byte{0xca, 0xfe, 0x01},
-		[]byte{0xca, 0xfe, 0x02},
-		[]byte{0xca, 0xfe, 0x03},
-	); err != nil {
+	if err := operator.addVote(NewVote(16)); err != nil {
 		t.Fatal(err)
 	}
 
-	// create the transfer and sign it
-	amount := uint64(16)
-	transfer := NewVote(amount)
+	// enable log to see nbConstraints
+	logger.Set(zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "15:04:05"}).With().Timestamp().Logger())
 
-	// update the state from the received transfer
-	err := operator.updateState(transfer)
+	var fullCircuit Circuit
+
+	_, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &fullCircuit)
 	if err != nil {
+		panic(err)
+	}
+}
+
+func TestCircuitSetupProveVerify(t *testing.T) {
+	operator := newTestOperator(t)
+
+	if err := operator.addVote(NewVote(16)); err != nil {
 		t.Fatal(err)
+	}
+
+	var fullCircuit Circuit
+	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &fullCircuit)
+	if err != nil {
+		panic(err)
 	}
 
 	witness, err := frontend.NewWitness(operator.Witnesses, ecc.BN254.ScalarField())
 	if err != nil {
 		panic(err)
-	}
-
-	// we allocate the slices of the circuit before compiling it
-	var inclusionProofCircuit Circuit
-	logger.Set(zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "15:04:05"}).With().Timestamp().Logger())
-	p := profile.Start()
-	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &inclusionProofCircuit)
-	if err != nil {
-		panic(err)
-	}
-	p.Stop()
-	fmt.Println("constraints", p.NbConstraints())
-
-	if testing.Short() {
-		return
-		// t.Skip("skipping rollup tests for circleCI")
 	}
 
 	// groth16 zkSNARK: Setup
@@ -176,9 +128,9 @@ func TestCircuitCompile(t *testing.T) {
 		panic(err)
 	}
 
-	// if err := test.IsSolved(circuit, op.Witnesses(), ecc.BN254.ScalarField()); err != nil {
-	// 	panic(err)
-	// }
+	if err := test.IsSolved(&fullCircuit, operator.Witnesses, ecc.BN254.ScalarField()); err != nil {
+		panic(err)
+	}
 
 	// groth16: Prove & Verify
 	proof, err := groth16.Prove(ccs, pk, witness)
@@ -205,4 +157,9 @@ func debugLog(t *testing.T, operator Operator) {
 			"value", mt.OldValue, "->", mt.NewValue,
 		)
 	}
+}
+
+func debugWitness(wit Circuit) {
+	js, _ := json.MarshalIndent(wit, "", "  ")
+	fmt.Printf("\n\n%s\n\n", js)
 }

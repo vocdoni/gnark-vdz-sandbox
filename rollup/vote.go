@@ -22,7 +22,7 @@ import (
 	"go.vocdoni.io/dvote/tree/arbo"
 )
 
-// Vote describe a rollup transfer
+// Vote describe a vote
 type Vote struct {
 	nullifier  []byte  // key
 	ballot     big.Int // value
@@ -30,7 +30,7 @@ type Vote struct {
 	commitment big.Int // value
 }
 
-// NewVote creates a new transfer (to be signed)
+// NewVote creates a new vote
 func NewVote(amount uint64) Vote {
 	var v Vote
 
