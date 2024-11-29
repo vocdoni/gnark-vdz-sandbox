@@ -76,7 +76,7 @@ func (circuit Circuit) Define(api frontend.API) error {
 
 	circuit.verifyAggregatedZKProof(api, packedInput)
 	circuit.verifyMerkleProofs(api, poseidon.Hash)
-	circuit.verifyMerkleTransitions(api, poseidon.Hash)
+	circuit.verifyMerkleTransitions(api)
 	circuit.verifyResults(api)
 	circuit.verifyOverwrites(api)
 	circuit.verifyStats(api)
@@ -120,46 +120,27 @@ func (circuit Circuit) verifyAggregatedZKProof(api frontend.API, packedInput fro
 	api.AssertIsEqual(1, 1) // TODO: mock, should actually verify Aggregated ZKProof
 }
 
-func (circuit Circuit) verifyMerkleProofs(api frontend.API, hFunc arbo.Hash) {
-	// check process is untouched
-	verifyMerkleProof(api, hFunc, circuit.RootHashBefore, circuit.ProcessID)
-	verifyMerkleProof(api, hFunc, circuit.RootHashBefore, circuit.CensusRoot)
-	verifyMerkleProof(api, hFunc, circuit.RootHashBefore, circuit.BallotMode)
-	verifyMerkleProof(api, hFunc, circuit.RootHashBefore, circuit.EncryptionKey)
+func (circuit Circuit) verifyMerkleProofs(api frontend.API, hFn arbo.Hash) {
+	circuit.ProcessID.VerifyProof(api, hFn, circuit.RootHashBefore)
+	circuit.CensusRoot.VerifyProof(api, hFn, circuit.RootHashBefore)
+	circuit.BallotMode.VerifyProof(api, hFn, circuit.RootHashBefore)
+	circuit.EncryptionKey.VerifyProof(api, hFn, circuit.RootHashBefore)
 }
 
-func (circuit Circuit) verifyMerkleTransitions(api frontend.API, hFunc arbo.Hash) {
-	// verify key transitions, order here is fundamental.
+func (circuit Circuit) verifyMerkleTransitions(api frontend.API) {
+	// verify chain of tree transitions, order here is fundamental.
 	root := circuit.RootHashBefore
 	api.Println("root starts with RootHashBefore, i.e.", prettyHex(root))
-	root = verifyMerkleTransition(api, hFunc, root, circuit.ResultsAdd)
-	root = verifyMerkleTransition(api, hFunc, root, circuit.ResultsSub)
+	root = circuit.ResultsAdd.Verify(api, root)
+	root = circuit.ResultsSub.Verify(api, root)
 	for i := range circuit.Ballot {
-		root = verifyMerkleTransition(api, hFunc, root, circuit.Ballot[i])
+		root = circuit.Ballot[i].Verify(api, root)
 	}
 	for i := range circuit.Commitment {
-		root = verifyMerkleTransition(api, hFunc, root, circuit.Commitment[i])
+		root = circuit.Commitment[i].Verify(api, root)
 	}
 	api.Println("and now root is", prettyHex(root), "should be equal to RootHashAfter", prettyHex(circuit.RootHashAfter))
 	api.AssertIsEqual(root, circuit.RootHashAfter)
-}
-
-func verifyMerkleProof(api frontend.API, hFunc arbo.Hash, root frontend.Variable, mp MerkleProof) {
-	api.AssertIsEqual(root, mp.Root)
-	mp.VerifyProof(api, hFunc)
-}
-
-// verifyMerkleTransition asserts a MerkleTransition is valid
-//   - mp.OldRoot matches passed oldRoot
-//   - mp.OldKey belongs to mp.OldRoot
-//   - mp.NewKey belongs to mp.NewRoot
-//
-// and returns mp.NewRoot
-func verifyMerkleTransition(api frontend.API, hFunc arbo.Hash, oldRoot frontend.Variable, mp MerkleTransition) frontend.Variable {
-	api.Println("now root is", prettyHex(oldRoot))
-	api.AssertIsEqual(oldRoot, mp.OldRoot)
-	mp.Verify(api, hFunc)
-	return mp.NewRoot
 }
 
 func (circuit Circuit) verifyResults(api frontend.API) {

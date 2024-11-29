@@ -145,19 +145,27 @@ func (o *Operator) GenMerkleProofFromArbo(k []byte) (MerkleProof, error) {
 }
 
 // Verify uses garbo.CheckInclusionProof to verify that:
+//   - mp.Root matches passed root
 //   - Key + Value belong to Root
-func (mp *MerkleProof) VerifyProof(api frontend.API, h garbo.Hash) {
-	if err := garbo.CheckInclusionProof(api, h, mp.Key, mp.Value, mp.Root, mp.Siblings[:]); err != nil {
+func (mp *MerkleProof) VerifyProof(api frontend.API, hFn garbo.Hash, root frontend.Variable) {
+	api.AssertIsEqual(root, mp.Root)
+
+	if err := garbo.CheckInclusionProof(api, hFn, mp.Key, mp.Value, mp.Root, mp.Siblings[:]); err != nil {
 		panic(err)
 	}
 }
 
 // Verify uses smt.Processor to verify that:
+//   - mp.OldRoot matches passed oldRoot
 //   - OldKey + OldValue belong to OldRoot
 //   - NewKey + NewValue belong to NewRoot
 //   - no other changes were introduced between OldRoot -> NewRoot
-func (mp *MerkleTransition) Verify(api frontend.API, h garbo.Hash) {
+//
+// and returns mp.NewRoot
+func (mp *MerkleTransition) Verify(api frontend.API, oldRoot frontend.Variable) frontend.Variable {
 	mp.printDebugLog(api)
+
+	api.AssertIsEqual(oldRoot, mp.OldRoot)
 
 	root := smt.Processor(api,
 		mp.OldRoot,
@@ -172,6 +180,7 @@ func (mp *MerkleTransition) Verify(api frontend.API, h garbo.Hash) {
 	)
 
 	api.AssertIsEqual(root, mp.NewRoot)
+	return mp.NewRoot
 }
 
 func (mp *MerkleTransition) printDebugLog(api frontend.API) {
