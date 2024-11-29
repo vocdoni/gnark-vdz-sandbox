@@ -20,6 +20,28 @@ type ArboProof struct {
 	Existence bool
 }
 
+func (o *Operator) GenArboProof(k []byte) (ArboProof, error) {
+	root, err := o.state.Root()
+	if err != nil {
+		return ArboProof{}, err
+	}
+	leafK, leafV, packedSiblings, existence, err := o.state.GenProof(k)
+	if err != nil {
+		return ArboProof{}, err
+	}
+	unpackedSiblings, err := arbo.UnpackSiblings(arbo.HashFunctionPoseidon, packedSiblings)
+	if err != nil {
+		return ArboProof{}, err
+	}
+	return ArboProof{
+		Root:      root,
+		Siblings:  unpackedSiblings,
+		Key:       leafK,
+		Value:     leafV,
+		Existence: existence,
+	}, nil
+}
+
 // MerkleProof stores the leaf, the path, and the root hash.
 type MerkleProof struct {
 	// Key + Value hashed through Siblings path, should produce Root hash
@@ -28,6 +50,51 @@ type MerkleProof struct {
 	Key      frontend.Variable
 	Value    frontend.Variable
 	Fnc      frontend.Variable // 0: inclusion, 1: non inclusion
+}
+
+func (o *Operator) GenMerkleProofFromArbo(k []byte) (MerkleProof, error) {
+	p, err := o.GenArboProof(k)
+	if err != nil {
+		return MerkleProof{}, err
+	}
+	return MerkleProofFromArboProof(p), nil
+}
+
+func MerkleProofFromArboProof(p ArboProof) MerkleProof {
+	fnc := 0 // inclusion
+	if !p.Existence {
+		fnc = 1 // non-inclusion
+	}
+	return MerkleProof{
+		Root:     arbo.BytesLEToBigInt(p.Root),
+		Siblings: padSiblings(p.Siblings),
+		Key:      arbo.BytesLEToBigInt(p.Key),
+		Value:    arbo.BytesLEToBigInt(p.Value),
+		Fnc:      fnc,
+	}
+}
+
+func padSiblings(unpackedSiblings [][]byte) [maxLevels]frontend.Variable {
+	paddedSiblings := [maxLevels]frontend.Variable{}
+	for i := range maxLevels {
+		if i < len(unpackedSiblings) {
+			paddedSiblings[i] = arbo.BytesLEToBigInt(unpackedSiblings[i])
+		} else {
+			paddedSiblings[i] = big.NewInt(0)
+		}
+	}
+	return paddedSiblings
+}
+
+// Verify uses garbo.CheckInclusionProof to verify that:
+//   - mp.Root matches passed root
+//   - Key + Value belong to Root
+func (mp *MerkleProof) VerifyProof(api frontend.API, hFn garbo.Hash, root frontend.Variable) {
+	api.AssertIsEqual(root, mp.Root)
+
+	if err := garbo.CheckInclusionProof(api, hFn, mp.Key, mp.Value, mp.Root, mp.Siblings[:]); err != nil {
+		panic(err)
+	}
 }
 
 // MerkleTransition stores a pair of leaves and root hashes, and a single path common to both proofs
@@ -85,73 +152,6 @@ func MerkleTransitionFromArboProofPair(before, after ArboProof) MerkleTransition
 		IsOld0:   isOld0,
 		Fnc0:     fnc0,
 		Fnc1:     fnc1,
-	}
-}
-
-func MerkleProofFromArboProof(p ArboProof) MerkleProof {
-	fnc := 0 // inclusion
-	if !p.Existence {
-		fnc = 1 // non-inclusion
-	}
-	return MerkleProof{
-		Root:     arbo.BytesLEToBigInt(p.Root),
-		Siblings: padSiblings(p.Siblings),
-		Key:      arbo.BytesLEToBigInt(p.Key),
-		Value:    arbo.BytesLEToBigInt(p.Value),
-		Fnc:      fnc,
-	}
-}
-
-func padSiblings(unpackedSiblings [][]byte) [maxLevels]frontend.Variable {
-	paddedSiblings := [maxLevels]frontend.Variable{}
-	for i := range maxLevels {
-		if i < len(unpackedSiblings) {
-			paddedSiblings[i] = arbo.BytesLEToBigInt(unpackedSiblings[i])
-		} else {
-			paddedSiblings[i] = big.NewInt(0)
-		}
-	}
-	return paddedSiblings
-}
-
-func (o *Operator) GenArboProof(k []byte) (ArboProof, error) {
-	root, err := o.state.Root()
-	if err != nil {
-		return ArboProof{}, err
-	}
-	leafK, leafV, packedSiblings, existence, err := o.state.GenProof(k)
-	if err != nil {
-		return ArboProof{}, err
-	}
-	unpackedSiblings, err := arbo.UnpackSiblings(arbo.HashFunctionPoseidon, packedSiblings)
-	if err != nil {
-		return ArboProof{}, err
-	}
-	return ArboProof{
-		Root:      root,
-		Siblings:  unpackedSiblings,
-		Key:       leafK,
-		Value:     leafV,
-		Existence: existence,
-	}, nil
-}
-
-func (o *Operator) GenMerkleProofFromArbo(k []byte) (MerkleProof, error) {
-	p, err := o.GenArboProof(k)
-	if err != nil {
-		return MerkleProof{}, err
-	}
-	return MerkleProofFromArboProof(p), nil
-}
-
-// Verify uses garbo.CheckInclusionProof to verify that:
-//   - mp.Root matches passed root
-//   - Key + Value belong to Root
-func (mp *MerkleProof) VerifyProof(api frontend.API, hFn garbo.Hash, root frontend.Variable) {
-	api.AssertIsEqual(root, mp.Root)
-
-	if err := garbo.CheckInclusionProof(api, hFn, mp.Key, mp.Value, mp.Root, mp.Siblings[:]); err != nil {
-		panic(err)
 	}
 }
 
