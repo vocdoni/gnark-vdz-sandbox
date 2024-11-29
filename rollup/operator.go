@@ -43,7 +43,9 @@ type Operator struct {
 	state     *arbo.Tree
 	Witnesses Circuit // witnesses for the snark circuit
 
-	ballotSum *big.Int
+	sumOfNewBallots         *big.Int
+	sumOfOverwrittenBallots *big.Int
+	numVotes                int
 }
 
 // NewOperator creates a new operator.
@@ -56,22 +58,22 @@ func NewOperator(db db.Database, processID, censusRoot, ballotMode, encryptionKe
 		return Operator{}, err
 	}
 
-	if _, _, err := addKey(tree, KeyProcessID, processID); err != nil {
+	if err := addKey(tree, KeyProcessID, processID); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := addKey(tree, KeyCensusRoot, censusRoot); err != nil {
+	if err := addKey(tree, KeyCensusRoot, censusRoot); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := addKey(tree, KeyBallotMode, ballotMode); err != nil {
+	if err := addKey(tree, KeyBallotMode, ballotMode); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := addKey(tree, KeyEncryptionKey, encryptionKey); err != nil {
+	if err := addKey(tree, KeyEncryptionKey, encryptionKey); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := addKey(tree, KeyResultsAdd, []byte{0x00}); err != nil {
+	if err := addKey(tree, KeyResultsAdd, []byte{0x00}); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := addKey(tree, KeyResultsSub, []byte{0x00}); err != nil {
+	if err := addKey(tree, KeyResultsSub, []byte{0x00}); err != nil {
 		return Operator{}, err
 	}
 
@@ -79,33 +81,49 @@ func NewOperator(db db.Database, processID, censusRoot, ballotMode, encryptionKe
 		state: tree,
 	}
 
-	o.Witnesses.NumNewVotes = 0
-	o.Witnesses.NumOverwrites = 0
-	o.Witnesses.AggregatedProof = 0
-	o.Witnesses.BallotSum = 0
-	o.ballotSum = big.NewInt(0)
-
-	if o.Witnesses.ProcessID, err = GenMerkleProof(o.state, KeyProcessID); err != nil {
-		return Operator{}, err
-	}
-	if o.Witnesses.CensusRoot, err = GenMerkleProof(o.state, KeyCensusRoot); err != nil {
-		return Operator{}, err
-	}
-	if o.Witnesses.BallotMode, err = GenMerkleProof(o.state, KeyBallotMode); err != nil {
-		return Operator{}, err
-	}
-	if o.Witnesses.EncryptionKey, err = GenMerkleProof(o.state, KeyEncryptionKey); err != nil {
+	if err := o.StartBatch(); err != nil {
 		return Operator{}, err
 	}
 
 	return o, nil
 }
 
-func addKey(t *arbo.Tree, k []byte, v []byte) (ArboProof, ArboProof, error) {
+func (o *Operator) StartBatch() error {
+	o.Witnesses.NumNewVotes = 0
+	o.Witnesses.NumOverwrites = 0
+	o.Witnesses.AggregatedProof = 0
+	o.Witnesses.SumOfNewBallots = 0
+	o.Witnesses.SumOfNewOverwrittenBallots = 0
+	o.sumOfNewBallots = big.NewInt(0)
+	o.sumOfOverwrittenBallots = big.NewInt(0)
+	o.numVotes = 0
+
+	var err error
+	if o.Witnesses.ProcessID, err = GenMerkleProof(o.state, KeyProcessID); err != nil {
+		return err
+	}
+	if o.Witnesses.CensusRoot, err = GenMerkleProof(o.state, KeyCensusRoot); err != nil {
+		return err
+	}
+	if o.Witnesses.BallotMode, err = GenMerkleProof(o.state, KeyBallotMode); err != nil {
+		return err
+	}
+	if o.Witnesses.EncryptionKey, err = GenMerkleProof(o.state, KeyEncryptionKey); err != nil {
+		return err
+	}
+	return nil
+}
+
+func addKey(t *arbo.Tree, k []byte, v []byte) error {
+	_, err := addKeyWithProof(t, k, v)
+	return err
+}
+
+func addKeyWithProof(t *arbo.Tree, k []byte, v []byte) (MerkleTransition, error) {
 	fmt.Println("\nadding key", "k=", k, "v=", v)
 	mpBefore, err := GenArboProof(t, k)
 	if err != nil {
-		return ArboProof{}, ArboProof{}, err
+		return MerkleTransition{}, err
 	}
 	fmt.Println("before:", "root=", prettyHex(mpBefore.Root), "k=", mpBefore.Key, "v=", mpBefore.Value,
 		"existence=", mpBefore.Existence)
@@ -114,18 +132,18 @@ func addKey(t *arbo.Tree, k []byte, v []byte) (ArboProof, ArboProof, error) {
 	}
 	if _, _, err := t.Get(k); errors.Is(err, arbo.ErrKeyNotFound) {
 		if err := t.Add(k, v); err != nil {
-			return ArboProof{}, ArboProof{}, fmt.Errorf("add key failed: %w", err)
+			return MerkleTransition{}, fmt.Errorf("add key failed: %w", err)
 		}
 	} else {
-		fmt.Println("\nkey exists, update instead", "k=", k, "v=", v)
+		fmt.Println("key exists, update instead")
 		if err := t.Update(k, v); err != nil {
-			return ArboProof{}, ArboProof{}, err
+			return MerkleTransition{}, fmt.Errorf("update key failed: %w", err)
 		}
 	}
 
 	mpAfter, err := GenArboProof(t, k)
 	if err != nil {
-		return ArboProof{}, ArboProof{}, err
+		return MerkleTransition{}, err
 	}
 	fmt.Println("after: ", "root=", prettyHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
 	for i := range mpAfter.Siblings {
@@ -139,11 +157,11 @@ func addKey(t *arbo.Tree, k []byte, v []byte) (ArboProof, ArboProof, error) {
 		fmt.Printf("\n ...now hack key 0x00=%v and regenerate proof for key 0x04\n", v)
 
 		if err := t.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {
-			return ArboProof{}, ArboProof{}, err
+			return MerkleTransition{}, err
 		}
 		mpAfter, err := GenArboProof(t, k)
 		if err != nil {
-			return ArboProof{}, ArboProof{}, err
+			return MerkleTransition{}, err
 		}
 		fmt.Println("hacked:", "root=", prettyHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
 		for i := range mpAfter.Siblings {
@@ -152,67 +170,79 @@ func addKey(t *arbo.Tree, k []byte, v []byte) (ArboProof, ArboProof, error) {
 
 	}
 
-	return mpBefore, mpAfter, nil
+	return MerkleTransitionFromArboProofPair(mpBefore, mpAfter), nil
 }
 
-// addVote updates the state according to transfer
-// numTransfer is the number of the transfer currently handled (between 0 and BatchSizeCircuit)
-func (o *Operator) addVote(t Vote) error {
+// addVote adds a vote to the state
+//   - if nullifier exists, it counts as vote overwrite
+//
+// TODO: use Tx to rollback in case of failure
+func (o *Operator) addVote(v Vote) error {
+	isOverwrite := false
+	if _, v, err := o.state.Get(v.nullifier); err == nil {
+		isOverwrite = true
+
+		// if nullifier existed, it's a vote overwrite, need to count the overwritten vote as ResultsSub
+		o.Witnesses.SumOfNewOverwrittenBallots = o.sumOfOverwrittenBallots.Add(
+			o.sumOfOverwrittenBallots, arbo.BytesLEToBigInt(v))
+
+		fmt.Println("is overwrite", isOverwrite)
+	}
+
+	o.Witnesses.SumOfNewBallots = o.sumOfNewBallots.Add(o.sumOfNewBallots, &v.ballot)
+
+	// now build ordered chain of MerkleTransitions
+	var err error
+
 	// RootHashBefore
-	{
-		root, err := o.state.Root()
-		if err != nil {
-			return err
-		}
-		o.Witnesses.RootHashBefore = arbo.BytesLEToBigInt(root)
+	o.Witnesses.RootHashBefore, err = o.RootAsBigInt()
+	if err != nil {
+		return err
 	}
 
-	o.Witnesses.BallotSum = o.ballotSum.Add(o.ballotSum, &t.ballot)
-
-	// update key 4 (ResultsAdd)
-	{
-		mpBefore, mpAfter, err := addKey(o.state, []byte{0x04}, arbo.BigIntToBytesLE(32, &t.ballot))
-		if err != nil {
-			return err
-		}
-		o.Witnesses.ResultsAdd = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
+	// add a Ballot
+	o.Witnesses.Ballot[o.numVotes], err = addKeyWithProof(o.state,
+		v.nullifier, arbo.BigIntToBytesLE(32, &v.ballot))
+	if err != nil {
+		return err
 	}
 
-	// update key 5 (ResultsSub)
-	{
-		mpBefore, mpAfter, err := addKey(o.state, []byte{0x05}, []byte{0x00}) // mock
-		if err != nil {
-			return err
-		}
-		o.Witnesses.ResultsSub = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
+	// add a Commitment
+	o.Witnesses.Commitment[o.numVotes], err = addKeyWithProof(o.state,
+		v.address, arbo.BigIntToBytesLE(32, &v.commitment))
+	if err != nil {
+		return err
 	}
 
-	// add a mock ballot
-	{
-		mpBefore, mpAfter, err := addKey(o.state, t.nullifier, arbo.BigIntToBytesLE(32, &t.ballot))
-		if err != nil {
-			return err
-		}
-		o.Witnesses.Ballot[0] = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
+	// update ResultsAdd
+	o.Witnesses.ResultsAdd, err = addKeyWithProof(o.state,
+		KeyResultsAdd, arbo.BigIntToBytesLE(32, o.sumOfNewBallots))
+	if err != nil {
+		return err
 	}
 
-	// add a mock commitment
-	{
-		mpBefore, mpAfter, err := addKey(o.state, t.address, arbo.BigIntToBytesLE(32, &t.commitment))
-		if err != nil {
-			return err
-		}
-		o.Witnesses.Commitment[0] = MerkleTransitionFromArboProofPair(mpBefore, mpAfter)
+	// update ResultsSub
+	o.Witnesses.ResultsSub, err = addKeyWithProof(o.state,
+		KeyResultsSub, arbo.BigIntToBytesLE(32, o.sumOfOverwrittenBallots))
+	if err != nil {
+		return err
 	}
 
 	// RootHashAfter
-	{
-		root, err := o.state.Root()
-		if err != nil {
-			return err
-		}
-		o.Witnesses.RootHashAfter = arbo.BytesLEToBigInt(root)
+	o.Witnesses.RootHashAfter, err = o.RootAsBigInt()
+	if err != nil {
+		return err
 	}
 
+	o.numVotes++
+
 	return nil
+}
+
+func (o *Operator) RootAsBigInt() (*big.Int, error) {
+	root, err := o.state.Root()
+	if err != nil {
+		return nil, err
+	}
+	return arbo.BytesLEToBigInt(root), nil
 }

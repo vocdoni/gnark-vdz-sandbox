@@ -148,7 +148,8 @@ func debugLog(t *testing.T, operator Operator) {
 	t.Log("public: RootHashAfter", prettyHex(operator.Witnesses.RootHashAfter))
 	t.Log("public: NumVotes", prettyHex(operator.Witnesses.NumNewVotes))
 	t.Log("public: NumOverwrites", prettyHex(operator.Witnesses.NumOverwrites))
-	t.Log("BallotSum", operator.Witnesses.BallotSum)
+	t.Log("BallotAddSum", operator.Witnesses.SumOfNewBallots)
+	t.Log("BallotSubSum", operator.Witnesses.SumOfNewOverwrittenBallots)
 	for name, mt := range map[string]MerkleTransition{
 		"ResultsAdd": operator.Witnesses.ResultsAdd,
 		"ResultsSub": operator.Witnesses.ResultsSub,

@@ -55,10 +55,9 @@ type Circuit struct {
 	Ballot        [VoteBatchSize]MerkleTransition
 	Commitment    [VoteBatchSize]MerkleTransition
 
-	// all of these values compose the preimage that is hashed
+	// all of the following values compose the preimage that is hashed
 	// to produce the public input needed to verify AggregatedProof.
-	// they are extracted from the MerkleProofs,
-	// except BallotSum, so we declare it as a frontend.Variable
+	// they are extracted from the MerkleProofs:
 	// ProcessID     --> ProcessID.Value
 	// CensusRoot    --> CensusRoot.Value
 	// BallotMode    --> BallotMode.Value
@@ -67,7 +66,8 @@ type Circuit struct {
 	// Ballots       --> Ballot[i].NewValue
 	// Addressess    --> Commitment[i].NewKey
 	// Commitments   --> Commitment[i].NewValue
-	BallotSum frontend.Variable
+	SumOfNewBallots            frontend.Variable
+	SumOfNewOverwrittenBallots frontend.Variable
 }
 
 // Define declares the circuit's constraints
@@ -130,30 +130,30 @@ func (circuit Circuit) verifyMerkleProofs(api frontend.API, hFn arbo.Hash) {
 func (circuit Circuit) verifyMerkleTransitions(api frontend.API) {
 	// verify chain of tree transitions, order here is fundamental.
 	root := circuit.RootHashBefore
-	api.Println("root starts with RootHashBefore, i.e.", prettyHex(root))
-	root = circuit.ResultsAdd.Verify(api, root)
-	root = circuit.ResultsSub.Verify(api, root)
+	api.Println("tree transition starts with RootHashBefore:", prettyHex(root))
 	for i := range circuit.Ballot {
 		root = circuit.Ballot[i].Verify(api, root)
 	}
 	for i := range circuit.Commitment {
 		root = circuit.Commitment[i].Verify(api, root)
 	}
+	root = circuit.ResultsAdd.Verify(api, root)
+	root = circuit.ResultsSub.Verify(api, root)
 	api.Println("and now root is", prettyHex(root), "should be equal to RootHashAfter", prettyHex(circuit.RootHashAfter))
 	api.AssertIsEqual(root, circuit.RootHashAfter)
 }
 
 func (circuit Circuit) verifyResults(api frontend.API) {
 	// TODO: mock, sum should be elGamal arithmetic
-	api.AssertIsEqual(api.Add(circuit.ResultsAdd.OldValue, circuit.BallotSum),
+	api.AssertIsEqual(api.Add(circuit.ResultsAdd.OldValue, circuit.SumOfNewBallots),
 		circuit.ResultsAdd.NewValue)
 }
 
 // verifyOverwrites is not planned for PoC v1.0
 func (circuit Circuit) verifyOverwrites(api frontend.API) {
 	// TODO: mock, sum should be elGamal arithmetic
-	// api.AssertIsEqual(api.Add(circuit.ResultsSub.OldValue, circuit.BallotSum),
-	// 	circuit.ResultsSub.NewValue)
+	api.AssertIsEqual(api.Add(circuit.ResultsSub.OldValue, circuit.SumOfNewOverwrittenBallots),
+		circuit.ResultsSub.NewValue)
 }
 
 func (circuit Circuit) verifyStats(api frontend.API) {
