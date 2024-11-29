@@ -46,7 +46,16 @@ func (t *circuitVerifyResults) Define(api frontend.API) error {
 func TestCircuitVerifyResults(t *testing.T) {
 	operator := newTestOperator(t)
 
-	if err := operator.addVote(NewVote(16)); err != nil {
+	if err := operator.StartBatch(); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(16)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(16)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.EndBatch(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -66,10 +75,18 @@ func TestCircuitVerifyResults(t *testing.T) {
 func TestCircuitFull(t *testing.T) {
 	operator := newTestOperator(t)
 
-	if err := operator.addVote(NewVote(16)); err != nil {
+	if err := operator.StartBatch(); err != nil {
 		t.Fatal(err)
 	}
-
+	if err := operator.AddVote(NewVote(16)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(16)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.EndBatch(); err != nil {
+		t.Fatal(err)
+	}
 	assert := test.NewAssert(t)
 
 	var fullCircuit Circuit
@@ -84,7 +101,16 @@ func TestCircuitFull(t *testing.T) {
 func TestCircuitCompile(t *testing.T) {
 	operator := newTestOperator(t)
 
-	if err := operator.addVote(NewVote(16)); err != nil {
+	if err := operator.StartBatch(); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(16)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(10)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.EndBatch(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -102,7 +128,16 @@ func TestCircuitCompile(t *testing.T) {
 func TestCircuitSetupProveVerify(t *testing.T) {
 	operator := newTestOperator(t)
 
-	if err := operator.addVote(NewVote(16)); err != nil {
+	if err := operator.StartBatch(); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(16)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(10)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.EndBatch(); err != nil {
 		t.Fatal(err)
 	}
 

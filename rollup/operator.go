@@ -45,7 +45,7 @@ type Operator struct {
 
 	sumOfNewBallots         *big.Int
 	sumOfOverwrittenBallots *big.Int
-	numVotes                int
+	votes                   []Vote
 }
 
 // NewOperator creates a new operator.
@@ -96,7 +96,7 @@ func (o *Operator) StartBatch() error {
 	o.Witnesses.SumOfNewOverwrittenBallots = 0
 	o.sumOfNewBallots = big.NewInt(0)
 	o.sumOfOverwrittenBallots = big.NewInt(0)
-	o.numVotes = 0
+	o.votes = []Vote{}
 
 	var err error
 	if o.Witnesses.ProcessID, err = GenMerkleProof(o.state, KeyProcessID); err != nil {
@@ -173,11 +173,14 @@ func addKeyWithProof(t *arbo.Tree, k []byte, v []byte) (MerkleTransition, error)
 	return MerkleTransitionFromArboProofPair(mpBefore, mpAfter), nil
 }
 
-// addVote adds a vote to the state
+// AddVote adds a vote to the state
 //   - if nullifier exists, it counts as vote overwrite
 //
 // TODO: use Tx to rollback in case of failure
-func (o *Operator) addVote(v Vote) error {
+func (o *Operator) AddVote(v Vote) error {
+	if len(o.votes) >= VoteBatchSize {
+		return fmt.Errorf("too many votes for this batch")
+	}
 	isOverwrite := false
 	if _, v, err := o.state.Get(v.nullifier); err == nil {
 		isOverwrite = true
@@ -190,7 +193,11 @@ func (o *Operator) addVote(v Vote) error {
 	}
 
 	o.Witnesses.SumOfNewBallots = o.sumOfNewBallots.Add(o.sumOfNewBallots, &v.ballot)
+	o.votes = append(o.votes, v)
+	return nil
+}
 
+func (o *Operator) EndBatch() error {
 	// now build ordered chain of MerkleTransitions
 	var err error
 
@@ -200,18 +207,22 @@ func (o *Operator) addVote(v Vote) error {
 		return err
 	}
 
-	// add a Ballot
-	o.Witnesses.Ballot[o.numVotes], err = addKeyWithProof(o.state,
-		v.nullifier, arbo.BigIntToBytesLE(32, &v.ballot))
-	if err != nil {
-		return err
+	// add Ballots
+	for i := range o.votes {
+		o.Witnesses.Ballot[i], err = addKeyWithProof(o.state,
+			o.votes[i].nullifier, arbo.BigIntToBytesLE(32, &o.votes[i].ballot))
+		if err != nil {
+			return err
+		}
 	}
 
 	// add a Commitment
-	o.Witnesses.Commitment[o.numVotes], err = addKeyWithProof(o.state,
-		v.address, arbo.BigIntToBytesLE(32, &v.commitment))
-	if err != nil {
-		return err
+	for i := range o.votes {
+		o.Witnesses.Commitment[i], err = addKeyWithProof(o.state,
+			o.votes[i].address, arbo.BigIntToBytesLE(32, &o.votes[i].commitment))
+		if err != nil {
+			return err
+		}
 	}
 
 	// update ResultsAdd
@@ -233,8 +244,6 @@ func (o *Operator) addVote(v Vote) error {
 	if err != nil {
 		return err
 	}
-
-	o.numVotes++
 
 	return nil
 }

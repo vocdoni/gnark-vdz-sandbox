@@ -28,7 +28,7 @@ const (
 	// maxKeyLen is ceil(maxLevels/8)
 	maxKeyLen = (maxLevels + 7) / 8
 	// nbVotes that were processed in AggregatedProof
-	VoteBatchSize = 1
+	VoteBatchSize = 2
 )
 
 type Circuit struct {

@@ -40,7 +40,13 @@ type AgreggatedProofPublicInputs struct {
 func TestOperatorVote(t *testing.T) {
 	operator := newTestOperator(t)
 
-	if err := operator.addVote(NewVote(16)); err != nil {
+	if err := operator.StartBatch(); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(16)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.EndBatch(); err != nil {
 		t.Fatal(err)
 	}
 }
