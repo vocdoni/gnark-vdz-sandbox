@@ -20,12 +20,12 @@ type ArboProof struct {
 	Existence bool
 }
 
-func (o *Operator) GenArboProof(k []byte) (ArboProof, error) {
-	root, err := o.state.Root()
+func GenArboProof(t *arbo.Tree, k []byte) (ArboProof, error) {
+	root, err := t.Root()
 	if err != nil {
 		return ArboProof{}, err
 	}
-	leafK, leafV, packedSiblings, existence, err := o.state.GenProof(k)
+	leafK, leafV, packedSiblings, existence, err := t.GenProof(k)
 	if err != nil {
 		return ArboProof{}, err
 	}
@@ -52,8 +52,8 @@ type MerkleProof struct {
 	Fnc      frontend.Variable // 0: inclusion, 1: non inclusion
 }
 
-func (o *Operator) GenMerkleProofFromArbo(k []byte) (MerkleProof, error) {
-	p, err := o.GenArboProof(k)
+func GenMerkleProof(t *arbo.Tree, k []byte) (MerkleProof, error) {
+	p, err := GenArboProof(t, k)
 	if err != nil {
 		return MerkleProof{}, err
 	}

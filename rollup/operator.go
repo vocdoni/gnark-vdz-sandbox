@@ -29,6 +29,15 @@ import (
 
 var hashFunc = arbo.HashFunctionPoseidon
 
+var (
+	KeyProcessID     = []byte{0x00}
+	KeyCensusRoot    = []byte{0x01}
+	KeyBallotMode    = []byte{0x02}
+	KeyEncryptionKey = []byte{0x03}
+	KeyResultsAdd    = []byte{0x04}
+	KeyResultsSub    = []byte{0x05}
+)
+
 // Operator represents a rollup operator
 type Operator struct {
 	state     *arbo.Tree
@@ -39,7 +48,6 @@ type Operator struct {
 
 // NewOperator creates a new operator.
 func NewOperator(db db.Database, processID, censusRoot, ballotMode, encryptionKey []byte) (Operator, error) {
-	o := Operator{}
 	tree, err := arbo.NewTree(arbo.Config{
 		Database: db, MaxLevels: maxLevels,
 		HashFunction: hashFunc,
@@ -47,37 +55,28 @@ func NewOperator(db db.Database, processID, censusRoot, ballotMode, encryptionKe
 	if err != nil {
 		return Operator{}, err
 	}
-	o.state = tree
-	if _, _, err := o.addKey([]byte{0x00}, processID); err != nil {
+
+	if _, _, err := addKey(tree, KeyProcessID, processID); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := o.addKey([]byte{0x01}, censusRoot); err != nil {
+	if _, _, err := addKey(tree, KeyCensusRoot, censusRoot); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := o.addKey([]byte{0x02}, ballotMode); err != nil {
+	if _, _, err := addKey(tree, KeyBallotMode, ballotMode); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := o.addKey([]byte{0x03}, encryptionKey); err != nil {
+	if _, _, err := addKey(tree, KeyEncryptionKey, encryptionKey); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := o.addKey([]byte{0x04}, []byte{0x00}); err != nil { // ResultsAdd
+	if _, _, err := addKey(tree, KeyResultsAdd, []byte{0x00}); err != nil {
 		return Operator{}, err
 	}
-	if _, _, err := o.addKey([]byte{0x05}, []byte{0x00}); err != nil { // ResultsSub
+	if _, _, err := addKey(tree, KeyResultsSub, []byte{0x00}); err != nil {
 		return Operator{}, err
 	}
 
-	if o.Witnesses.ProcessID, err = o.GenMerkleProofFromArbo([]byte{0x00}); err != nil {
-		return Operator{}, err
-	}
-	if o.Witnesses.CensusRoot, err = o.GenMerkleProofFromArbo([]byte{0x01}); err != nil {
-		return Operator{}, err
-	}
-	if o.Witnesses.BallotMode, err = o.GenMerkleProofFromArbo([]byte{0x02}); err != nil {
-		return Operator{}, err
-	}
-	if o.Witnesses.EncryptionKey, err = o.GenMerkleProofFromArbo([]byte{0x03}); err != nil {
-		return Operator{}, err
+	o := Operator{
+		state: tree,
 	}
 
 	o.Witnesses.NumNewVotes = 0
@@ -86,12 +85,25 @@ func NewOperator(db db.Database, processID, censusRoot, ballotMode, encryptionKe
 	o.Witnesses.BallotSum = 0
 	o.ballotSum = big.NewInt(0)
 
+	if o.Witnesses.ProcessID, err = GenMerkleProof(o.state, KeyProcessID); err != nil {
+		return Operator{}, err
+	}
+	if o.Witnesses.CensusRoot, err = GenMerkleProof(o.state, KeyCensusRoot); err != nil {
+		return Operator{}, err
+	}
+	if o.Witnesses.BallotMode, err = GenMerkleProof(o.state, KeyBallotMode); err != nil {
+		return Operator{}, err
+	}
+	if o.Witnesses.EncryptionKey, err = GenMerkleProof(o.state, KeyEncryptionKey); err != nil {
+		return Operator{}, err
+	}
+
 	return o, nil
 }
 
-func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
+func addKey(t *arbo.Tree, k []byte, v []byte) (ArboProof, ArboProof, error) {
 	fmt.Println("\nwill add key", "k=", k, "v=", v)
-	mpBefore, err := o.GenArboProof(k)
+	mpBefore, err := GenArboProof(t, k)
 	if err != nil {
 		return ArboProof{}, ArboProof{}, err
 	}
@@ -100,18 +112,18 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	for i := range mpBefore.Siblings {
 		fmt.Println("siblings=", prettyHex(mpBefore.Siblings[i]))
 	}
-	if _, _, err := o.state.Get(k); errors.Is(err, arbo.ErrKeyNotFound) {
-		if err := o.state.Add(k, v); err != nil {
+	if _, _, err := t.Get(k); errors.Is(err, arbo.ErrKeyNotFound) {
+		if err := t.Add(k, v); err != nil {
 			return ArboProof{}, ArboProof{}, fmt.Errorf("add key failed: %w", err)
 		}
 	} else {
 		fmt.Println("\nkey exists, update instead", "k=", k, "v=", v)
-		if err := o.state.Update(k, v); err != nil {
+		if err := t.Update(k, v); err != nil {
 			return ArboProof{}, ArboProof{}, err
 		}
 	}
 
-	mpAfter, err := o.GenArboProof(k)
+	mpAfter, err := GenArboProof(t, k)
 	if err != nil {
 		return ArboProof{}, ArboProof{}, err
 	}
@@ -126,10 +138,10 @@ func (o *Operator) addKey(k []byte, v []byte) (ArboProof, ArboProof, error) {
 	if _, b := os.LookupEnv("HACK"); b && bytes.Equal(k, []byte{0x03}) {
 		fmt.Printf("\n ...now hack key 0x00=%v and regenerate proof for key 0x04\n", v)
 
-		if err := o.state.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {
+		if err := t.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {
 			return ArboProof{}, ArboProof{}, err
 		}
-		mpAfter, err := o.GenArboProof(k)
+		mpAfter, err := GenArboProof(t, k)
 		if err != nil {
 			return ArboProof{}, ArboProof{}, err
 		}
@@ -159,7 +171,7 @@ func (o *Operator) addVote(t Vote) error {
 
 	// update key 4 (ResultsAdd)
 	{
-		mpBefore, mpAfter, err := o.addKey([]byte{0x04}, arbo.BigIntToBytesLE(32, &t.ballot))
+		mpBefore, mpAfter, err := addKey(o.state, []byte{0x04}, arbo.BigIntToBytesLE(32, &t.ballot))
 		if err != nil {
 			return err
 		}
@@ -168,7 +180,7 @@ func (o *Operator) addVote(t Vote) error {
 
 	// update key 5 (ResultsSub)
 	{
-		mpBefore, mpAfter, err := o.addKey([]byte{0x05}, []byte{0x00}) // mock
+		mpBefore, mpAfter, err := addKey(o.state, []byte{0x05}, []byte{0x00}) // mock
 		if err != nil {
 			return err
 		}
@@ -177,7 +189,7 @@ func (o *Operator) addVote(t Vote) error {
 
 	// add a mock ballot
 	{
-		mpBefore, mpAfter, err := o.addKey(t.nullifier, arbo.BigIntToBytesLE(32, &t.ballot))
+		mpBefore, mpAfter, err := addKey(o.state, t.nullifier, arbo.BigIntToBytesLE(32, &t.ballot))
 		if err != nil {
 			return err
 		}
@@ -186,7 +198,7 @@ func (o *Operator) addVote(t Vote) error {
 
 	// add a mock commitment
 	{
-		mpBefore, mpAfter, err := o.addKey(t.address, arbo.BigIntToBytesLE(32, &t.commitment))
+		mpBefore, mpAfter, err := addKey(o.state, t.address, arbo.BigIntToBytesLE(32, &t.commitment))
 		if err != nil {
 			return err
 		}
