@@ -188,6 +188,8 @@ func (mp *MerkleTransition) printDebugLog(api frontend.API) {
 	api.Println("old key, value, root, isold0 = ", mp.OldKey, mp.OldValue, prettyHex(mp.OldRoot), mp.IsOld0)
 	api.Println("new key, value, root, fnc0,1 = ", mp.NewKey, mp.NewValue, prettyHex(mp.NewRoot), mp.Fnc0, mp.Fnc1)
 	for i := range mp.Siblings {
-		api.Println("siblings", prettyHex(mp.Siblings[i]))
+		if bi, ok := mp.Siblings[i].(*big.Int); ok && bi.Int64() != 0 {
+			api.Println("siblings", prettyHex(mp.Siblings[i]))
+		}
 	}
 }

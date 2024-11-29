@@ -102,7 +102,7 @@ func NewOperator(db db.Database, processID, censusRoot, ballotMode, encryptionKe
 }
 
 func addKey(t *arbo.Tree, k []byte, v []byte) (ArboProof, ArboProof, error) {
-	fmt.Println("\nwill add key", "k=", k, "v=", v)
+	fmt.Println("\nadding key", "k=", k, "v=", v)
 	mpBefore, err := GenArboProof(t, k)
 	if err != nil {
 		return ArboProof{}, ArboProof{}, err
