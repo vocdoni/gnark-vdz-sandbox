@@ -66,8 +66,6 @@ type Circuit struct {
 	// Ballots       --> Ballot[i].NewValue
 	// Addressess    --> Commitment[i].NewKey
 	// Commitments   --> Commitment[i].NewValue
-	SumOfNewBallots            frontend.Variable
-	SumOfNewOverwrittenBallots frontend.Variable
 }
 
 // Define declares the circuit's constraints
@@ -138,21 +136,44 @@ func (circuit Circuit) verifyMerkleTransitions(api frontend.API) {
 		root = circuit.Commitment[i].Verify(api, root)
 	}
 	root = circuit.ResultsAdd.Verify(api, root)
+	api.Println("verified merkle transition ResultsAdd", circuit.ResultsAdd.OldValue, "->", circuit.ResultsAdd.NewValue)
 	root = circuit.ResultsSub.Verify(api, root)
+	api.Println("verified merkle transition ResultsSub", circuit.ResultsSub.OldValue, "->", circuit.ResultsSub.NewValue)
 	api.Println("and now root is", prettyHex(root), "should be equal to RootHashAfter", prettyHex(circuit.RootHashAfter))
 	api.AssertIsEqual(root, circuit.RootHashAfter)
 }
 
 func (circuit Circuit) verifyResults(api frontend.API) {
+	sum := api.Add(0, 0)
+	for i := range circuit.Ballot {
+		sum = api.Add(sum, circuit.Ballot[i].NewValue)
+	}
 	// TODO: mock, sum should be elGamal arithmetic
-	api.AssertIsEqual(api.Add(circuit.ResultsAdd.OldValue, circuit.SumOfNewBallots),
+	api.AssertIsEqual(api.Add(circuit.ResultsAdd.OldValue, sum),
 		circuit.ResultsAdd.NewValue)
 }
 
-// verifyOverwrites is not planned for PoC v1.0
+//	when Fnc0==0 && Fnc1==1 then it's an UPDATE operation
+
+func isUpdate(api frontend.API, fnc0, fnc1 frontend.Variable) frontend.Variable {
+	fnc0IsZero := api.IsZero(fnc0)
+
+	// Check if fnc1 is 1 (not zero)
+	fnc1IsOne := api.Sub(1, api.IsZero(fnc1))
+
+	// Combine conditions: fnc0 == 0 AND fnc1 == 1
+	return api.And(fnc0IsZero, fnc1IsOne)
+}
+
+// verifyOverwrites is not planned for PoC v1.0, but we implemented the backend anyway
 func (circuit Circuit) verifyOverwrites(api frontend.API) {
 	// TODO: mock, sum should be elGamal arithmetic
-	api.AssertIsEqual(api.Add(circuit.ResultsSub.OldValue, circuit.SumOfNewOverwrittenBallots),
+	sum := api.Add(0, 0)
+	for i := range circuit.Ballot {
+		sum = api.Add(sum, api.Select(isUpdate(api, circuit.Ballot[i].Fnc0, circuit.Ballot[i].Fnc1),
+			circuit.Ballot[i].OldValue, 0))
+	}
+	api.AssertIsEqual(api.Add(circuit.ResultsSub.OldValue, sum),
 		circuit.ResultsSub.NewValue)
 }
 

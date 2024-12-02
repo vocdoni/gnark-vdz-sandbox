@@ -43,6 +43,8 @@ type Operator struct {
 	state     *arbo.Tree
 	Witnesses Circuit // witnesses for the snark circuit
 
+	resultsAdd              *big.Int
+	resultsSub              *big.Int
 	sumOfNewBallots         *big.Int
 	sumOfOverwrittenBallots *big.Int
 	votes                   []Vote
@@ -92,8 +94,12 @@ func (o *Operator) StartBatch() error {
 	o.Witnesses.NumNewVotes = 0
 	o.Witnesses.NumOverwrites = 0
 	o.Witnesses.AggregatedProof = 0
-	o.Witnesses.SumOfNewBallots = 0
-	o.Witnesses.SumOfNewOverwrittenBallots = 0
+	if o.resultsAdd == nil {
+		o.resultsAdd = big.NewInt(0)
+	}
+	if o.resultsSub == nil {
+		o.resultsSub = big.NewInt(0)
+	}
 	o.sumOfNewBallots = big.NewInt(0)
 	o.sumOfOverwrittenBallots = big.NewInt(0)
 	o.votes = []Vote{}
@@ -186,13 +192,13 @@ func (o *Operator) AddVote(v Vote) error {
 		isOverwrite = true
 
 		// if nullifier existed, it's a vote overwrite, need to count the overwritten vote as ResultsSub
-		o.Witnesses.SumOfNewOverwrittenBallots = o.sumOfOverwrittenBallots.Add(
+		o.sumOfOverwrittenBallots = o.sumOfOverwrittenBallots.Add(
 			o.sumOfOverwrittenBallots, arbo.BytesLEToBigInt(v))
 
 		fmt.Println("is overwrite", isOverwrite)
 	}
 
-	o.Witnesses.SumOfNewBallots = o.sumOfNewBallots.Add(o.sumOfNewBallots, &v.ballot)
+	o.sumOfNewBallots = o.sumOfNewBallots.Add(o.sumOfNewBallots, &v.ballot)
 	o.votes = append(o.votes, v)
 	return nil
 }
@@ -225,16 +231,18 @@ func (o *Operator) EndBatch() error {
 		}
 	}
 
+	fmt.Println("#### EndBatch pre ", o.resultsAdd, o.sumOfNewBallots)
 	// update ResultsAdd
 	o.Witnesses.ResultsAdd, err = addKeyWithProof(o.state,
-		KeyResultsAdd, arbo.BigIntToBytesLE(32, o.sumOfNewBallots))
+		KeyResultsAdd, arbo.BigIntToBytesLE(32, o.resultsAdd.Add(o.resultsAdd, o.sumOfNewBallots)))
 	if err != nil {
 		return err
 	}
+	fmt.Println("#### EndBatch post", o.resultsAdd, o.sumOfNewBallots)
 
 	// update ResultsSub
 	o.Witnesses.ResultsSub, err = addKeyWithProof(o.state,
-		KeyResultsSub, arbo.BigIntToBytesLE(32, o.sumOfOverwrittenBallots))
+		KeyResultsSub, arbo.BigIntToBytesLE(32, o.resultsSub.Add(o.resultsSub, o.sumOfOverwrittenBallots)))
 	if err != nil {
 		return err
 	}

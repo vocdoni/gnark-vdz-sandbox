@@ -43,7 +43,7 @@ func TestOperatorVote(t *testing.T) {
 	if err := operator.StartBatch(); err != nil {
 		t.Fatal(err)
 	}
-	if err := operator.AddVote(NewVote(16)); err != nil {
+	if err := operator.AddVote(NewVote(1, 16)); err != nil {
 		t.Fatal(err)
 	}
 	if err := operator.EndBatch(); err != nil {

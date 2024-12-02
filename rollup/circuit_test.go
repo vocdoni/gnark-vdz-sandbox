@@ -49,10 +49,10 @@ func TestCircuitVerifyResults(t *testing.T) {
 	if err := operator.StartBatch(); err != nil {
 		t.Fatal(err)
 	}
-	if err := operator.AddVote(NewVote(16)); err != nil {
+	if err := operator.AddVote(NewVote(1, 16)); err != nil {
 		t.Fatal(err)
 	}
-	if err := operator.AddVote(NewVote(16)); err != nil {
+	if err := operator.AddVote(NewVote(2, 16)); err != nil { // expected result: 16+16=32
 		t.Fatal(err)
 	}
 	if err := operator.EndBatch(); err != nil {
@@ -75,22 +75,46 @@ func TestCircuitVerifyResults(t *testing.T) {
 func TestCircuitFull(t *testing.T) {
 	operator := newTestOperator(t)
 
+	// first batch
 	if err := operator.StartBatch(); err != nil {
 		t.Fatal(err)
 	}
-	if err := operator.AddVote(NewVote(16)); err != nil {
+	if err := operator.AddVote(NewVote(1, 16)); err != nil { // new vote 1
 		t.Fatal(err)
 	}
-	if err := operator.AddVote(NewVote(16)); err != nil {
+	if err := operator.AddVote(NewVote(2, 17)); err != nil { // new vote 2
 		t.Fatal(err)
 	}
-	if err := operator.EndBatch(); err != nil {
+	if err := operator.EndBatch(); err != nil { // expected result: 16+17=33
 		t.Fatal(err)
 	}
 	assert := test.NewAssert(t)
 
 	var fullCircuit Circuit
 
+	assert.ProverSucceeded(
+		&fullCircuit,
+		&operator.Witnesses,
+		test.WithCurves(ecc.BN254),
+		test.WithBackends(backend.GROTH16))
+
+	// second batch
+	if err := operator.StartBatch(); err != nil {
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(1, 10)); err != nil { // overwrite vote 1
+		t.Fatal(err)
+	}
+	if err := operator.AddVote(NewVote(3, 100)); err != nil { // add vote 3
+		t.Fatal(err)
+	}
+	if err := operator.EndBatch(); err != nil {
+		t.Fatal(err)
+	}
+	// expected results:
+	// ResultsAdd: 16+17+10+100 = 143
+	// ResultsSub: 16 = 16
+	// Final: 16+17-16+10+100 = 127
 	assert.ProverSucceeded(
 		&fullCircuit,
 		&operator.Witnesses,
@@ -104,10 +128,10 @@ func TestCircuitCompile(t *testing.T) {
 	if err := operator.StartBatch(); err != nil {
 		t.Fatal(err)
 	}
-	if err := operator.AddVote(NewVote(16)); err != nil {
+	if err := operator.AddVote(NewVote(1, 16)); err != nil {
 		t.Fatal(err)
 	}
-	if err := operator.AddVote(NewVote(10)); err != nil {
+	if err := operator.AddVote(NewVote(1, 10)); err != nil { // overwrite, expected result = 10
 		t.Fatal(err)
 	}
 	if err := operator.EndBatch(); err != nil {
@@ -131,10 +155,10 @@ func TestCircuitSetupProveVerify(t *testing.T) {
 	if err := operator.StartBatch(); err != nil {
 		t.Fatal(err)
 	}
-	if err := operator.AddVote(NewVote(16)); err != nil {
+	if err := operator.AddVote(NewVote(1, 16)); err != nil {
 		t.Fatal(err)
 	}
-	if err := operator.AddVote(NewVote(10)); err != nil {
+	if err := operator.AddVote(NewVote(1, 10)); err != nil { // overwrite, expected result = 10
 		t.Fatal(err)
 	}
 	if err := operator.EndBatch(); err != nil {
@@ -183,8 +207,6 @@ func debugLog(t *testing.T, operator Operator) {
 	t.Log("public: RootHashAfter", prettyHex(operator.Witnesses.RootHashAfter))
 	t.Log("public: NumVotes", prettyHex(operator.Witnesses.NumNewVotes))
 	t.Log("public: NumOverwrites", prettyHex(operator.Witnesses.NumOverwrites))
-	t.Log("BallotAddSum", operator.Witnesses.SumOfNewBallots)
-	t.Log("BallotSubSum", operator.Witnesses.SumOfNewOverwrittenBallots)
 	for name, mt := range map[string]MerkleTransition{
 		"ResultsAdd": operator.Witnesses.ResultsAdd,
 		"ResultsSub": operator.Witnesses.ResultsSub,
