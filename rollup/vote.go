@@ -17,7 +17,6 @@ limitations under the License.
 package rollup
 
 import (
-	"fmt"
 	"math/big"
 
 	"go.vocdoni.io/dvote/tree/arbo"
@@ -39,7 +38,6 @@ func NewVote(nullifier, amount uint64) Vote {
 
 	v.nullifier = arbo.BigIntToBytesLE(maxKeyLen, big.NewInt(int64(nullifier)+100)) // mock
 	v.ballot.SetUint64(amount)
-	fmt.Printf("new vote with nullifier %d: %+v\n", nullifier, v)
 
 	v.address = arbo.BigIntToBytesLE(maxKeyLen, big.NewInt(int64(nullifier)+200)) // mock
 	v.commitment.SetUint64(amount + 256)                                          // mock

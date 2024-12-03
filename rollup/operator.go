@@ -17,11 +17,9 @@ limitations under the License.
 package rollup
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 
 	"go.vocdoni.io/dvote/db"
 	"go.vocdoni.io/dvote/tree/arbo"
@@ -62,22 +60,22 @@ func NewOperator(db db.Database, processID, censusRoot, ballotMode, encryptionKe
 		return Operator{}, err
 	}
 
-	if err := addKey(tree, KeyProcessID, processID); err != nil {
+	if err := tree.Add(KeyProcessID, processID); err != nil {
 		return Operator{}, err
 	}
-	if err := addKey(tree, KeyCensusRoot, censusRoot); err != nil {
+	if err := tree.Add(KeyCensusRoot, censusRoot); err != nil {
 		return Operator{}, err
 	}
-	if err := addKey(tree, KeyBallotMode, ballotMode); err != nil {
+	if err := tree.Add(KeyBallotMode, ballotMode); err != nil {
 		return Operator{}, err
 	}
-	if err := addKey(tree, KeyEncryptionKey, encryptionKey); err != nil {
+	if err := tree.Add(KeyEncryptionKey, encryptionKey); err != nil {
 		return Operator{}, err
 	}
-	if err := addKey(tree, KeyResultsAdd, []byte{0x00}); err != nil {
+	if err := tree.Add(KeyResultsAdd, []byte{0x00}); err != nil {
 		return Operator{}, err
 	}
-	if err := addKey(tree, KeyResultsSub, []byte{0x00}); err != nil {
+	if err := tree.Add(KeyResultsSub, []byte{0x00}); err != nil {
 		return Operator{}, err
 	}
 
@@ -124,62 +122,24 @@ func (o *Operator) StartBatch() error {
 	return nil
 }
 
-func addKey(t *arbo.Tree, k []byte, v []byte) error {
-	_, err := addKeyWithProof(t, k, v)
-	return err
-}
-
 func addKeyWithProof(t *arbo.Tree, k []byte, v []byte) (MerkleTransition, error) {
-	fmt.Println("\nadding key", "k=", k, "v=", v)
 	mpBefore, err := GenArboProof(t, k)
 	if err != nil {
 		return MerkleTransition{}, err
-	}
-	fmt.Println("before:", "root=", prettyHex(mpBefore.Root), "k=", mpBefore.Key, "v=", mpBefore.Value,
-		"existence=", mpBefore.Existence)
-	for i := range mpBefore.Siblings {
-		fmt.Println("siblings=", prettyHex(mpBefore.Siblings[i]))
 	}
 	if _, _, err := t.Get(k); errors.Is(err, arbo.ErrKeyNotFound) {
 		if err := t.Add(k, v); err != nil {
 			return MerkleTransition{}, fmt.Errorf("add key failed: %w", err)
 		}
 	} else {
-		fmt.Println("key exists, update instead")
 		if err := t.Update(k, v); err != nil {
 			return MerkleTransition{}, fmt.Errorf("update key failed: %w", err)
 		}
 	}
-
 	mpAfter, err := GenArboProof(t, k)
 	if err != nil {
 		return MerkleTransition{}, err
 	}
-	fmt.Println("after: ", "root=", prettyHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
-	for i := range mpAfter.Siblings {
-		fmt.Println("siblings=", prettyHex(mpAfter.Siblings[i]))
-	}
-
-	// root, _ := o.ArboState.Root()
-	// o.ArboState.PrintGraphviz(root)
-
-	if _, b := os.LookupEnv("HACK"); b && bytes.Equal(k, []byte{0x03}) {
-		fmt.Printf("\n ...now hack key 0x00=%v and regenerate proof for key 0x04\n", v)
-
-		if err := t.Update([]byte{0x00}, []byte{0xca, 0xca}); err != nil {
-			return MerkleTransition{}, err
-		}
-		mpAfter, err := GenArboProof(t, k)
-		if err != nil {
-			return MerkleTransition{}, err
-		}
-		fmt.Println("hacked:", "root=", prettyHex(mpAfter.Root), "k=", mpAfter.Key, "v=", mpAfter.Value)
-		for i := range mpAfter.Siblings {
-			fmt.Println("siblings=", prettyHex(mpAfter.Siblings[i]))
-		}
-
-	}
-
 	return MerkleTransitionFromArboProofPair(mpBefore, mpAfter), nil
 }
 
@@ -191,15 +151,17 @@ func (o *Operator) AddVote(v Vote) error {
 	if len(o.votes) >= VoteBatchSize {
 		return fmt.Errorf("too many votes for this batch")
 	}
+
+	// if nullifier exists, it's a vote overwrite, need to count the overwritten vote
+	// so it's later added to circuit.ResultsSub
 	if _, v, err := o.state.Get(v.nullifier); err == nil {
-		// if nullifier existed, it's a vote overwrite, need to count the overwritten vote as ResultsSub
-		o.overwriteSum = o.overwriteSum.Add(
-			o.overwriteSum, arbo.BytesLEToBigInt(v))
+		o.overwriteSum = o.overwriteSum.Add(o.overwriteSum, arbo.BytesLEToBigInt(v))
 		o.overwriteCount++
 	}
 
 	o.ballotSum = o.ballotSum.Add(o.ballotSum, &v.ballot)
 	o.ballotCount++
+
 	o.votes = append(o.votes, v)
 	return nil
 }
