@@ -163,7 +163,7 @@ func MerkleTransitionFromArboProofPair(before, after ArboProof) MerkleTransition
 //
 // and returns mp.NewRoot
 func (mp *MerkleTransition) Verify(api frontend.API, oldRoot frontend.Variable) frontend.Variable {
-	mp.printDebugLog(api)
+	// mp.printDebugLog(api)
 
 	api.AssertIsEqual(oldRoot, mp.OldRoot)
 

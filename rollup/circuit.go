@@ -54,71 +54,57 @@ type Circuit struct {
 	ResultsSub    MerkleTransition
 	Ballot        [VoteBatchSize]MerkleTransition
 	Commitment    [VoteBatchSize]MerkleTransition
-
-	// all of the following values compose the preimage that is hashed
-	// to produce the public input needed to verify AggregatedProof.
-	// they are extracted from the MerkleProofs:
-	// ProcessID     --> ProcessID.Value
-	// CensusRoot    --> CensusRoot.Value
-	// BallotMode    --> BallotMode.Value
-	// EncryptionKey --> EncryptionKey.Value
-	// Nullifiers    --> Ballot[i].NewKey
-	// Ballots       --> Ballot[i].NewValue
-	// Addressess    --> Commitment[i].NewKey
-	// Commitments   --> Commitment[i].NewValue
 }
 
 // Define declares the circuit's constraints
 func (circuit Circuit) Define(api frontend.API) error {
-	packedInput := circuit.packInputs(api)
-
-	circuit.verifyAggregatedZKProof(api, packedInput)
+	circuit.verifyAggregatedZKProof(api)
 	circuit.verifyMerkleProofs(api, poseidon.Hash)
 	circuit.verifyMerkleTransitions(api)
-	circuit.verifyResults(api)
-	circuit.verifyOverwrites(api)
-	circuit.verifyStats(api)
-
+	circuit.verifyBallots(api)
 	return nil
 }
 
-// packInputs extracts the Values (or NewKey, NewValue) of
-//
-//	circuit.ProcessID,
-//	circuit.CensusRoot,
-//	circuit.BallotMode,
-//	circuit.EncryptionKey,
-//	circuit.Commitment[],
-//	circuit.Ballot[],
-//
-// and returns a hash that is used to verify AggregatedZKProof
-func (circuit Circuit) packInputs(api frontend.API) frontend.Variable {
-	for i, p := range []MerkleProof{
-		circuit.ProcessID,
-		circuit.CensusRoot,
-		circuit.BallotMode,
-		circuit.EncryptionKey,
-	} {
-		api.Println("packInputs mock", i, p.Value) // mock
-	}
-	for i := range circuit.Ballot {
-		api.Println("packInputs mock nullifier", i, circuit.Ballot[i].NewKey) // mock
-		api.Println("packInputs mock ballot", i, circuit.Ballot[i].NewValue)  // mock
-	}
-	for i := range circuit.Commitment {
-		api.Println("packInputs mock address", i, circuit.Commitment[i].NewKey)      // mock
-		api.Println("packInputs mock commitment", i, circuit.Commitment[i].NewValue) // mock
-	}
-	return 1
-}
+func (circuit Circuit) verifyAggregatedZKProof(api frontend.API) {
+	// all of the following values compose the preimage that is hashed
+	// to produce the public input needed to verify AggregatedProof.
+	// they are extracted from the MerkleProofs:
+	// ProcessID     := circuit.ProcessID.Value
+	// CensusRoot    := circuit.CensusRoot.Value
+	// BallotMode    := circuit.BallotMode.Value
+	// EncryptionKey := circuit.EncryptionKey.Value
+	// Nullifiers    := circuit.Ballot[i].NewKey
+	// Ballots       := circuit.Ballot[i].NewValue
+	// Addressess    := circuit.Commitment[i].NewKey
+	// Commitments   := circuit.Commitment[i].NewValue
 
-func (circuit Circuit) verifyAggregatedZKProof(api frontend.API, packedInput frontend.Variable) {
-	api.Println("verifyAggregatedZKProof mock", circuit.AggregatedProof, packedInput) // mock
+	api.Println("verify AggregatedZKProof mock:", circuit.AggregatedProof) // mock
 
-	api.AssertIsEqual(1, 1) // TODO: mock, should actually verify Aggregated ZKProof
+	packedInputs := func() frontend.Variable {
+		for i, p := range []MerkleProof{
+			circuit.ProcessID,
+			circuit.CensusRoot,
+			circuit.BallotMode,
+			circuit.EncryptionKey,
+		} {
+			api.Println("packInputs mock", i, p.Value) // mock
+		}
+		for i := range circuit.Ballot {
+			api.Println("packInputs mock nullifier", i, circuit.Ballot[i].NewKey) // mock
+			api.Println("packInputs mock ballot", i, circuit.Ballot[i].NewValue)  // mock
+		}
+		for i := range circuit.Commitment {
+			api.Println("packInputs mock address", i, circuit.Commitment[i].NewKey)      // mock
+			api.Println("packInputs mock commitment", i, circuit.Commitment[i].NewValue) // mock
+		}
+		return 1 // mock, should return hash of packed inputs
+	}
+
+	api.AssertIsEqual(packedInputs(), 1) // TODO: mock, should actually verify AggregatedZKProof
 }
 
 func (circuit Circuit) verifyMerkleProofs(api frontend.API, hFn arbo.Hash) {
+	api.Println("verify ProcessID, CensusRoot, BallotMode and EncryptionKey belong to RootHashBefore")
 	circuit.ProcessID.VerifyProof(api, hFn, circuit.RootHashBefore)
 	circuit.CensusRoot.VerifyProof(api, hFn, circuit.RootHashBefore)
 	circuit.BallotMode.VerifyProof(api, hFn, circuit.RootHashBefore)
@@ -143,42 +129,41 @@ func (circuit Circuit) verifyMerkleTransitions(api frontend.API) {
 	api.AssertIsEqual(root, circuit.RootHashAfter)
 }
 
-func (circuit Circuit) verifyResults(api frontend.API) {
-	sum := api.Add(0, 0)
-	for i := range circuit.Ballot {
-		sum = api.Add(sum, circuit.Ballot[i].NewValue)
+// TODO: mock, sum should be elGamal arithmetic
+func (circuit Circuit) verifyBallots(api frontend.API) {
+	var ballotSum, overwrittenSum, ballotCount, overwrittenCount frontend.Variable = 0, 0, 0, 0
+
+	for _, b := range circuit.Ballot {
+		ballotSum = api.Add(ballotSum, api.Select(api.Or(isUpdate(api, b), isInsert(api, b)),
+			b.NewValue, 0))
+		overwrittenSum = api.Add(overwrittenSum, api.Select(isUpdate(api, b),
+			b.OldValue, 0))
+		ballotCount = api.Add(ballotCount, api.Select(api.Or(isUpdate(api, b), isInsert(api, b)),
+			1, 0))
+		overwrittenCount = api.Add(overwrittenCount, api.Select(isUpdate(api, b),
+			1, 0))
 	}
-	// TODO: mock, sum should be elGamal arithmetic
-	api.AssertIsEqual(api.Add(circuit.ResultsAdd.OldValue, sum),
+
+	api.AssertIsEqual(
+		api.Add(circuit.ResultsAdd.OldValue, ballotSum),
 		circuit.ResultsAdd.NewValue)
+	api.AssertIsEqual(
+		api.Add(circuit.ResultsSub.OldValue, overwrittenSum),
+		circuit.ResultsSub.NewValue)
+	api.AssertIsEqual(circuit.NumNewVotes, ballotCount)
+	api.AssertIsEqual(circuit.NumOverwrites, overwrittenCount)
 }
 
-//	when Fnc0==0 && Fnc1==1 then it's an UPDATE operation
-
-func isUpdate(api frontend.API, fnc0, fnc1 frontend.Variable) frontend.Variable {
-	fnc0IsZero := api.IsZero(fnc0)
-
-	// Check if fnc1 is 1 (not zero)
-	fnc1IsOne := api.Sub(1, api.IsZero(fnc1))
-
-	// Combine conditions: fnc0 == 0 AND fnc1 == 1
+// isUpdate returns true when mp.Fnc0 == 0 && mp.Fnc1 == 1
+func isUpdate(api frontend.API, mp MerkleTransition) frontend.Variable {
+	fnc0IsZero := api.IsZero(mp.Fnc0)
+	fnc1IsOne := api.Sub(1, api.IsZero(mp.Fnc1))
 	return api.And(fnc0IsZero, fnc1IsOne)
 }
 
-// verifyOverwrites is not planned for PoC v1.0, but we implemented the backend anyway
-func (circuit Circuit) verifyOverwrites(api frontend.API) {
-	// TODO: mock, sum should be elGamal arithmetic
-	sum := api.Add(0, 0)
-	for i := range circuit.Ballot {
-		sum = api.Add(sum, api.Select(isUpdate(api, circuit.Ballot[i].Fnc0, circuit.Ballot[i].Fnc1),
-			circuit.Ballot[i].OldValue, 0))
-	}
-	api.AssertIsEqual(api.Add(circuit.ResultsSub.OldValue, sum),
-		circuit.ResultsSub.NewValue)
-}
-
-func (circuit Circuit) verifyStats(api frontend.API) {
-	// TBD
-	// Check NumVotes = len(Nullifiers)
-	// Check NumOverwrites = len(EncryptedBallots) - len(Nullifiers)
+// isInsert returns true when mp.Fnc0 == 1 && mp.Fnc1 == 0
+func isInsert(api frontend.API, mp MerkleTransition) frontend.Variable {
+	fnc0IsOne := api.Sub(1, api.IsZero(mp.Fnc0))
+	fnc1IsZero := api.IsZero(mp.Fnc1)
+	return api.And(fnc1IsZero, fnc0IsOne)
 }

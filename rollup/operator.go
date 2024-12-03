@@ -43,11 +43,13 @@ type Operator struct {
 	state     *arbo.Tree
 	Witnesses Circuit // witnesses for the snark circuit
 
-	resultsAdd              *big.Int
-	resultsSub              *big.Int
-	sumOfNewBallots         *big.Int
-	sumOfOverwrittenBallots *big.Int
-	votes                   []Vote
+	resultsAdd     *big.Int
+	resultsSub     *big.Int
+	ballotSum      *big.Int
+	overwriteSum   *big.Int
+	ballotCount    int
+	overwriteCount int
+	votes          []Vote
 }
 
 // NewOperator creates a new operator.
@@ -100,8 +102,10 @@ func (o *Operator) StartBatch() error {
 	if o.resultsSub == nil {
 		o.resultsSub = big.NewInt(0)
 	}
-	o.sumOfNewBallots = big.NewInt(0)
-	o.sumOfOverwrittenBallots = big.NewInt(0)
+	o.ballotSum = big.NewInt(0)
+	o.overwriteSum = big.NewInt(0)
+	o.ballotCount = 0
+	o.overwriteCount = 0
 	o.votes = []Vote{}
 
 	var err error
@@ -187,18 +191,15 @@ func (o *Operator) AddVote(v Vote) error {
 	if len(o.votes) >= VoteBatchSize {
 		return fmt.Errorf("too many votes for this batch")
 	}
-	isOverwrite := false
 	if _, v, err := o.state.Get(v.nullifier); err == nil {
-		isOverwrite = true
-
 		// if nullifier existed, it's a vote overwrite, need to count the overwritten vote as ResultsSub
-		o.sumOfOverwrittenBallots = o.sumOfOverwrittenBallots.Add(
-			o.sumOfOverwrittenBallots, arbo.BytesLEToBigInt(v))
-
-		fmt.Println("is overwrite", isOverwrite)
+		o.overwriteSum = o.overwriteSum.Add(
+			o.overwriteSum, arbo.BytesLEToBigInt(v))
+		o.overwriteCount++
 	}
 
-	o.sumOfNewBallots = o.sumOfNewBallots.Add(o.sumOfNewBallots, &v.ballot)
+	o.ballotSum = o.ballotSum.Add(o.ballotSum, &v.ballot)
+	o.ballotCount++
 	o.votes = append(o.votes, v)
 	return nil
 }
@@ -222,7 +223,7 @@ func (o *Operator) EndBatch() error {
 		}
 	}
 
-	// add a Commitment
+	// add Commitments
 	for i := range o.votes {
 		o.Witnesses.Commitment[i], err = addKeyWithProof(o.state,
 			o.votes[i].address, arbo.BigIntToBytesLE(32, &o.votes[i].commitment))
@@ -231,21 +232,23 @@ func (o *Operator) EndBatch() error {
 		}
 	}
 
-	fmt.Println("#### EndBatch pre ", o.resultsAdd, o.sumOfNewBallots)
 	// update ResultsAdd
 	o.Witnesses.ResultsAdd, err = addKeyWithProof(o.state,
-		KeyResultsAdd, arbo.BigIntToBytesLE(32, o.resultsAdd.Add(o.resultsAdd, o.sumOfNewBallots)))
+		KeyResultsAdd, arbo.BigIntToBytesLE(32, o.resultsAdd.Add(o.resultsAdd, o.ballotSum)))
 	if err != nil {
 		return err
 	}
-	fmt.Println("#### EndBatch post", o.resultsAdd, o.sumOfNewBallots)
 
 	// update ResultsSub
 	o.Witnesses.ResultsSub, err = addKeyWithProof(o.state,
-		KeyResultsSub, arbo.BigIntToBytesLE(32, o.resultsSub.Add(o.resultsSub, o.sumOfOverwrittenBallots)))
+		KeyResultsSub, arbo.BigIntToBytesLE(32, o.resultsSub.Add(o.resultsSub, o.overwriteSum)))
 	if err != nil {
 		return err
 	}
+
+	// update stats
+	o.Witnesses.NumNewVotes = o.ballotCount
+	o.Witnesses.NumOverwrites = o.overwriteCount
 
 	// RootHashAfter
 	o.Witnesses.RootHashAfter, err = o.RootAsBigInt()
